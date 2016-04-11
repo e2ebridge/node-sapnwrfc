@@ -86,7 +86,7 @@ class Function : public Loggable
   static std::string mapExternalTypeToJavaScriptType(RFCTYPE sapType);
   bool addMetaData(const CHND container, v8::Local<v8::Object>& parent, const RFC_ABAP_NAME name,
                    RFCTYPE type, unsigned int length, RFC_DIRECTION direction,
-                   RFC_PARAMETER_TEXT paramText = nullptr);
+                   RFC_PARAMETER_TEXT paramText = nullptr, bool refresh = false);
 
   class InvocationBaton
   {

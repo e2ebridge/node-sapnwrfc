@@ -299,12 +299,17 @@ NAN_METHOD(Connection::Lookup)
 
   self->log(Levels::SILLY, "Connection::Lookup");
 
-  if (info.Length() != 1) {
-    Nan::ThrowError("Function expects 1 argument");
+  if (info.Length() < 1 || info.Length() > 2) {
+    Nan::ThrowError("Function expects 1 or 2 arguments");
     return;
   }
   if (!info[0]->IsString()) {
     Nan::ThrowError("Argument 1 must be function module name");
+    return;
+  }
+
+  if (info.Length() > 1 && !info[1]->IsObject()) {
+    Nan::ThrowError("Argument 2 must be an object");
     return;
   }
 

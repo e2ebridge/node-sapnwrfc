@@ -65,8 +65,25 @@ v8::Local<v8::Value> Function::NewInstance(Connection &connection, const Nan::NA
   assert(self != nullptr);
   self->connection = &connection;
 
-  // Lookup function interface
+  // get the options
+  bool refreshMeta = false;
+  if( args.Length() > 1) {
+    v8::Local<v8::Object> optionsObject = args[1]->ToObject();
+	refreshMeta = optionsObject->Get(Nan::New("refreshMeta").ToLocalChecked())->IsTrue();
+  }
+
   v8::String::Value functionName(args[0]);
+
+  if(refreshMeta) {
+	  self->log(Levels::SILLY, "Perfoming function descriptor refresh");
+	  RFC_ATTRIBUTES connectionAttributes;
+	  RfcGetConnectionAttributes(connection.GetConnectionHandle(), &connectionAttributes, &self->errorInfo);
+	  LOG_API(self, "RfcGetConnectionAttributes");
+	  RfcRemoveFunctionDesc( connectionAttributes.sysId, (const SAP_UC*)*functionName, &self->errorInfo);
+	  LOG_API(self, "RfcRemoveFunctionDesc");
+  }
+
+  // Lookup function interface
   self->functionDescHandle = RfcGetFunctionDesc(connection.GetConnectionHandle(), (const SAP_UC*)*functionName, &self->errorInfo);
   LOG_API(self, "RfcGetFunctionDesc");
   assert(self->errorInfo.code != RFC_INVALID_HANDLE);
@@ -233,6 +250,13 @@ NAN_METHOD(Function::MetaData)
 
   self->log(Levels::SILLY, "Function::MetaData");
 
+  // get the options
+  bool refreshMeta = false;
+  if( info.Length() > 0) {
+    v8::Local<v8::Object> optionsObject = info[0]->ToObject();
+	refreshMeta = optionsObject->Get(Nan::New("refresh").ToLocalChecked())->IsTrue();
+  }
+
   RfcGetParameterCount(self->functionDescHandle, &parmCount, &self->errorInfo);
   LOG_API(self, "RfcGetParameterCount");
   if (self->errorInfo.code != RFC_OK) {
@@ -280,7 +304,8 @@ NAN_METHOD(Function::MetaData)
     }
 
     if (!self->addMetaData(functionHandle, properties, parmDesc.name, parmDesc.type,
-                           parmDesc.nucLength, parmDesc.direction, parmDesc.parameterText)) {
+                           parmDesc.nucLength, parmDesc.direction,
+	                       parmDesc.parameterText, refreshMeta)) {
       RETURN_RFC_ERROR(self->errorInfo);
     }
   }
@@ -1262,7 +1287,8 @@ std::string Function::mapExternalTypeToJavaScriptType(RFCTYPE sapType)
 
 bool Function::addMetaData(const CHND container, v8::Local<v8::Object> &parent,
                            const RFC_ABAP_NAME name, RFCTYPE type, unsigned int length,
-                           RFC_DIRECTION direction, RFC_PARAMETER_TEXT paramText)
+                           RFC_DIRECTION direction, RFC_PARAMETER_TEXT paramText,
+                           bool refresh)
 {
   Nan::EscapableHandleScope scope;
 
@@ -1323,9 +1349,23 @@ bool Function::addMetaData(const CHND container, v8::Local<v8::Object> &parent,
       return false;
     }
 
-    actualType->Set(
+	actualType->Set(
         Nan::New<v8::String>("sapTypeName").ToLocalChecked(),
         Nan::New<v8::String>((const uint16_t*)typeName).ToLocalChecked());
+
+	if( refresh) {
+		RFC_ATTRIBUTES connectionAttributes;
+		RfcGetConnectionAttributes( connection->connectionHandle, &connectionAttributes, &errorInfo);
+		LOG_API(this, "RfcGetConnectionAttributes");
+		RfcRemoveTypeDesc(connectionAttributes.sysId, typeName, &errorInfo);
+		LOG_API(this, "RfcRemoveTypeDesc");
+		typeHandle = RfcDescribeType(strucHandle, &errorInfo);
+	    LOG_API(this, "RfcDescribeType");
+	    assert(typeHandle);
+	    if (typeHandle == nullptr) {
+	      return false;
+	    }
+	}
 
     RfcGetFieldCount(typeHandle, &fieldCount, &errorInfo);
     LOG_API(this, "RfcGetFieldCount");
@@ -1344,7 +1384,7 @@ bool Function::addMetaData(const CHND container, v8::Local<v8::Object> &parent,
       }
 
       if (!addMetaData( strucHandle, properties, fieldDesc.name, fieldDesc.type,
-                        fieldDesc.nucLength, RFC_DIRECTION(0))) {
+                        fieldDesc.nucLength, RFC_DIRECTION(0), nullptr, refresh)) {
         return false;
       }
     }
@@ -1374,6 +1414,20 @@ bool Function::addMetaData(const CHND container, v8::Local<v8::Object> &parent,
     if (errorInfo.code != RFC_OK) {
       return false;
     }
+
+	if( refresh) {
+		RFC_ATTRIBUTES connectionAttributes;
+		RfcGetConnectionAttributes( connection->connectionHandle, &connectionAttributes, &errorInfo);
+		LOG_API(this, "RfcGetConnectionAttributes");
+		RfcRemoveTypeDesc(connectionAttributes.sysId, typeName, &errorInfo);
+		LOG_API(this, "RfcRemoveTypeDesc");
+		typeHandle = RfcDescribeType(tableHandle, &errorInfo);
+	    LOG_API(this, "RfcDescribeType");
+	    assert(typeHandle);
+	    if (typeHandle == nullptr) {
+	      return false;
+	    }
+	}
 
     RfcGetFieldCount(typeHandle, &fieldCount, &errorInfo);
     LOG_API(this, "RfcGetFieldCount");
@@ -1409,7 +1463,7 @@ bool Function::addMetaData(const CHND container, v8::Local<v8::Object> &parent,
 
       log(Levels::SILLY, "Function::addMetaData recurse");
       if (!addMetaData( rowHandle, properties, fieldDesc.name, fieldDesc.type,
-                   fieldDesc.nucLength, RFC_DIRECTION(0))) {
+                   fieldDesc.nucLength, RFC_DIRECTION(0), nullptr, refresh)) {
         return false;
       }
     }
