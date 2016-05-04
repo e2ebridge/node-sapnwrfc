@@ -1,12 +1,12 @@
 {
-  "name": "sapnwrfc",
-  "version": "0.2.0",
+  "name": "@e2ebridge/sapnwrfc",
+  "version": "1.0.0",
   "description": "Bindings for the SAP NetWeaver RFC SDK",
   "license": "MIT",
-  "homepage": "https://github.com/jdorner/node-sapnwrfc",
+  "homepage": "https://github.com/e2ebridge/node-sapnwrfc",
   "repository": {
     "type": "git",
-    "url": "git://github.com/jdorner/node-sapnwrfc.git"
+    "url": "https://github.com/e2ebridge/node-sapnwrfc.git"
   },
   "keywords": [
     "sapnwrfc",
@@ -14,6 +14,15 @@
     "rfc"
   ],
   "author": "Joachim Dorner <joachim.dorner@gmail.com>",
+  "contributors": [
+    "Alex <hypothermia.frost@gmail.com>",
+    "Alfred Gebert <agebert@e2ebridge.com>",
+    "Jakub Zakrzewski <jzakrzewski@e2ebridge.com>",
+    "LeandroDG <sinstereo@gmail.com>",
+    "Michael Scherer <michael.scherer@sealsystems.de>",
+    "Stefan Scherer <scherer_stefan@icloud.com>",
+    "Szilard Novaki <novaki@agmen.hu>"
+  ],
   "main": "sapnwrfc",
   "engines": {
     "node": ">= 0.8.0",
