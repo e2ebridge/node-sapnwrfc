@@ -26,12 +26,13 @@ SOFTWARE.
 #include "Connection.h"
 #include "Function.h"
 
-Connection::Connection() :
+Connection::Connection( v8::Handle<v8::Object> thisHandle) :
   loginParamsSize(0),
   loginParams(nullptr),
   connectionHandle(nullptr)
 {
   uv_mutex_init(&this->invocationMutex);
+  init( thisHandle);
 }
 
 Connection::~Connection()
@@ -57,8 +58,7 @@ NAN_METHOD(Connection::New)
     return;
   }
 
-  Connection *self = new Connection();
-  self->Wrap(info.This());
+  Connection *self = new Connection( info.This());
 
   self->log(Levels::SILLY, "Connection object created");
 
@@ -220,7 +220,7 @@ v8::Local<v8::Value> Connection::CloseConnection(void)
     LOG_API(this, "RfcCloseConnection");
     if (rc != RFC_OK) {
       log(Levels::DBG, "Connection::CloseConnection: Error closing connection");
-      scope.Escape(RfcError(errorInfo));
+      return scope.Escape(RfcError(errorInfo));
     }
   }
 

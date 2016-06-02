@@ -30,8 +30,9 @@ SOFTWARE.
 
 Nan::Persistent<v8::Function> Function::ctor;
 
-Function::Function(): connection(nullptr), functionDescHandle(nullptr)
-{
+Function::Function( v8::Handle<v8::Object> thisHandle): connection(nullptr), functionDescHandle(nullptr)
+{    
+    init( thisHandle);
 }
 
 Function::~Function()
@@ -122,8 +123,7 @@ NAN_METHOD(Function::New)
     return;
   }
 
-  Function *self = new Function();
-  self->Wrap(info.This());
+  Function *self = new Function(info.This());
   self->log(Levels::SILLY, "Function::New: Function instance constructed");
 
   info.GetReturnValue().Set(info.This());

@@ -100,14 +100,19 @@ static v8::Local<v8::Value> errorInfoToJS(const RFC_ERROR_INFO &info)
   return scope.Escape(obj);
 }
 
-void Loggable::logFunctionWeakCallback(const Nan::WeakCallbackInfo<Loggable>& data)
-{
-  data.GetParameter()->resetLogFunction();
-}
-
 Loggable::~Loggable()
 {
-  resetLogFunction();
+}
+
+void Loggable::init(v8::Handle<v8::Object> thisHandle)
+{
+    Wrap( thisHandle);
+
+    logFunction =
+        Nan::Persistent<v8::Function, v8::CopyablePersistentTraits<v8::Function>>(
+          v8::Local<v8::Function>::Cast(
+                    Nan::Get(handle(),
+                             Nan::New<v8::String>("_log").ToLocalChecked()).ToLocalChecked()));
 }
 
 void Loggable::log(const std::string& level, const std::string& message)
@@ -133,22 +138,13 @@ void Loggable::log(const std::string& level, v8::Local<v8::Value> message, v8::L
 
 void Loggable::log_(const std::string& level, v8::Local<v8::Value> message, v8::Local<v8::Value> meta)
 {
-  if( logFunction.IsEmpty()) {
-    logFunction =
-        Nan::Persistent<v8::Function, v8::CopyablePersistentTraits<v8::Function>>(
-          v8::Local<v8::Function>::Cast(
-	                Nan::Get(handle(),
-	                         Nan::New<v8::String>("_log").ToLocalChecked()).ToLocalChecked()));
-    logFunction.SetWeak(this, logFunctionWeakCallback, Nan::WeakCallbackType::kParameter);
-    logFunction.MarkIndependent();
-  }
-
   v8::Local<v8::Value> argv[3];
   argv[0] = Nan::New<v8::String>(level).ToLocalChecked();
   argv[1] = message->ToString();
   argv[2] = meta;
   assert(!logFunction.IsEmpty());
-  Nan::Call(Nan::New(logFunction), handle(), 3, argv);
+  auto functionHandle = Nan::New(logFunction);
+  Nan::Call(functionHandle, functionHandle, 3, argv);
 }
 
 void Loggable::log(const LogEntry& logEntry)

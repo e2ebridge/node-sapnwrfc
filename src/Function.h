@@ -37,7 +37,7 @@ class Function : public Loggable
   static v8::Local<v8::Value> NewInstance(Connection &connection, const Nan::NAN_METHOD_ARGS_TYPE args);
 
   protected:
-  Function();
+  Function( v8::Handle<v8::Object> thisHandle);
   ~Function();
 
   static NAN_METHOD(New);

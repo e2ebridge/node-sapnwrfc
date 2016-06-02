@@ -40,7 +40,7 @@ class Connection : public Loggable
 
   protected:
 
-    Connection();
+    Connection( v8::Handle<v8::Object> thisHandle);
     ~Connection();
     static NAN_METHOD(GetVersion);
     static NAN_METHOD(New);

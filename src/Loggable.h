@@ -36,7 +36,6 @@ SOFTWARE.
 class Loggable : public node::ObjectWrap
 {
   public:
-    static void logFunctionWeakCallback(const Nan::WeakCallbackInfo<Loggable>& data);
     ~Loggable();
 
     class Levels
@@ -69,6 +68,8 @@ class Loggable : public node::ObjectWrap
   protected:
 
     Nan::Persistent<v8::Function, v8::CopyablePersistentTraits<v8::Function>> logFunction;
+
+    void init( v8::Handle<v8::Object> thisHandle);
 
 	void log( const std::string& level, const char* message) { log(level, std::string(message)); }
     void log( const std::string& level, const std::string& message);
