@@ -327,6 +327,7 @@ NAN_METHOD(Connection::Lookup)
   v8::Local<v8::Value> f = Function::NewInstance(*self, info);
   if( IsException(f)) {
     self->log(Levels::DBG, "Connection::Lookup: Unable to create function instance");
+    Nan::ThrowError(f);
   }
   info.GetReturnValue().Set(f);
 }
