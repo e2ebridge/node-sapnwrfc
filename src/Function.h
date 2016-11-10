@@ -88,6 +88,8 @@ class Function : public Loggable
                    RFCTYPE type, unsigned int length, RFC_DIRECTION direction,
                    RFC_PARAMETER_TEXT paramText = nullptr, bool refresh = false);
 
+  void addObjectInfoToLogMeta(v8::Local<v8::Object> meta);
+
   class InvocationBaton
   {
     public:

@@ -59,6 +59,7 @@ class Connection : public Loggable
     RFC_CONNECTION_HANDLE GetConnectionHandle(void);
     void LockMutex(void);
     void UnlockMutex(void);
+    void addObjectInfoToLogMeta(v8::Local<v8::Object> meta);
 
     unsigned int loginParamsSize;
     RFC_CONNECTION_PARAMETER *loginParams;

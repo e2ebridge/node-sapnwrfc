@@ -37,6 +37,7 @@ Connection::Connection( v8::Handle<v8::Object> thisHandle) :
 
 Connection::~Connection()
 {
+  log(Levels::SILLY, "Connection::~Connection");
   this->CloseConnection();
 
   uv_mutex_destroy(&this->invocationMutex);
@@ -240,6 +241,14 @@ void Connection::LockMutex(void)
 void Connection::UnlockMutex(void)
 {
   uv_mutex_unlock(&this->invocationMutex);
+}
+
+void Connection::addObjectInfoToLogMeta(v8::Local<v8::Object> meta)
+{
+  char ptr[ 2 + sizeof(void*)*2 + 1]; // optional "0x" + each byte of pointer represented by 2 digits + terminator
+  snprintf( ptr, 2 + sizeof(void*)*2 + 1, "%p", this);
+  meta->Set(Nan::New<v8::String>("nativeConnection").ToLocalChecked(),
+            Nan::New<v8::String>(ptr).ToLocalChecked());
 }
 
 NAN_METHOD(Connection::IsOpen)

@@ -37,6 +37,7 @@ Function::Function( v8::Handle<v8::Object> thisHandle): connection(nullptr), fun
 
 Function::~Function()
 {
+  log(Levels::SILLY, "Function::~Function");
 }
 
 NAN_MODULE_INIT(Function::Init)
@@ -60,11 +61,11 @@ v8::Local<v8::Value> Function::NewInstance(Connection &connection, const Nan::NA
   v8::Local<v8::Object> func = Nan::New(ctor)->NewInstance();
   Function *self = node::ObjectWrap::Unwrap<Function>(func);
 
-  self->log(Levels::SILLY, "Function::NewInstance");
-
   // Save connection
   assert(self != nullptr);
   self->connection = &connection;
+
+  self->log(Levels::SILLY, "Function::NewInstance");
 
   // get the options
   bool refreshMeta = false;
@@ -1470,4 +1471,15 @@ bool Function::addMetaData(const CHND container, v8::Local<v8::Object> &parent,
   }
 
   return true;
+}
+
+void Function::addObjectInfoToLogMeta(v8::Local<v8::Object> meta)
+{
+  char ptr[ 2 + sizeof(void*)*2 + 1];
+  snprintf( ptr, 2 + sizeof(void*)*2 + 1, "%p", this->connection);
+  meta->Set(Nan::New<v8::String>("nativeConnection").ToLocalChecked(),
+            Nan::New<v8::String>(ptr).ToLocalChecked());
+  snprintf( ptr, 2 + sizeof(void*)*2 + 1, "%p", this);
+  meta->Set(Nan::New<v8::String>("nativeFunction").ToLocalChecked(),
+            Nan::New<v8::String>(ptr).ToLocalChecked());
 }

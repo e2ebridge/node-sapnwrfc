@@ -104,6 +104,8 @@ class Loggable : public node::ObjectWrap
                             const std::string& file, const std::string& function,
                             unsigned long line, RFC_ERROR_INFO& errorInfo,
                             const Loggable::LogEntry::Meta& meta);
+
+    virtual void addObjectInfoToLogMeta(v8::Local<v8::Object> meta) = 0;
 };
 
 #define LOG_API(self,call) { (self)->logAPICall((call),__FILE__,BOOST_CURRENT_FUNCTION,__LINE__,(self)->errorInfo);}while(0)

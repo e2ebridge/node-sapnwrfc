@@ -141,7 +141,14 @@ void Loggable::log_(const std::string& level, v8::Local<v8::Value> message, v8::
   v8::Local<v8::Value> argv[3];
   argv[0] = Nan::New<v8::String>(level).ToLocalChecked();
   argv[1] = message->ToString();
+
+  if(meta.IsEmpty() || meta->IsUndefined()) {
+      meta = Nan::New<v8::Object>();
+  }
+
+  addObjectInfoToLogMeta(meta->ToObject());
   argv[2] = meta;
+
   assert(!logFunction.IsEmpty());
   auto functionHandle = Nan::New(logFunction);
   Nan::Call(functionHandle, functionHandle, 3, argv);
