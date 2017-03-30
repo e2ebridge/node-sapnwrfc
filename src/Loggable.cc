@@ -117,16 +117,19 @@ void Loggable::init(v8::Handle<v8::Object> thisHandle)
 
 void Loggable::log(const std::string& level, const std::string& message)
 {
+  Nan::HandleScope scope;
   log(level, Nan::New<v8::String>(message).ToLocalChecked());
 }
 
 void Loggable::log(const std::string& level, v8::Local<v8::Value> message)
 {
+  Nan::HandleScope scope;
   log(level, message, Nan::Undefined());
 }
 
 void Loggable::log(const std::string& level, const std::string& message, v8::Local<v8::Value> meta)
 {
+  Nan::HandleScope scope;
   log(level, Nan::New<v8::String>(message).ToLocalChecked(), meta);
 }
 
@@ -138,6 +141,7 @@ void Loggable::log(const std::string& level, v8::Local<v8::Value> message, v8::L
 
 void Loggable::log_(const std::string& level, v8::Local<v8::Value> message, v8::Local<v8::Value> meta)
 {
+  Nan::HandleScope scope;
   v8::Local<v8::Value> argv[3];
   argv[0] = Nan::New<v8::String>(level).ToLocalChecked();
   argv[1] = message->ToString();
