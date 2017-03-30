@@ -37,7 +37,7 @@ Connection::Connection( v8::Handle<v8::Object> thisHandle) :
 
 Connection::~Connection()
 {
-  log(Levels::SILLY, "Connection::~Connection");
+  deferLog(Levels::SILLY, "Connection::~Connection");
   this->CloseConnection();
 
   uv_mutex_destroy(&this->invocationMutex);

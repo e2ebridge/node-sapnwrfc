@@ -37,7 +37,7 @@ Function::Function( v8::Handle<v8::Object> thisHandle): connection(nullptr), fun
 
 Function::~Function()
 {
-  log(Levels::SILLY, "Function::~Function");
+  deferLog(Levels::SILLY, "Function::~Function");
 }
 
 NAN_MODULE_INIT(Function::Init)
