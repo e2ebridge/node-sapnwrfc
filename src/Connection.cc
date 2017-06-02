@@ -38,7 +38,14 @@ Connection::Connection( v8::Handle<v8::Object> thisHandle) :
 Connection::~Connection()
 {
   deferLog(Levels::SILLY, "Connection::~Connection");
-  this->CloseConnection();
+
+  if (this->connectionHandle != nullptr) {
+    RFC_RC rc = RfcCloseConnection(this->connectionHandle, &errorInfo);
+    DEFER_LOG_API(this, "RfcCloseConnection");
+    if (rc != RFC_OK) {
+      deferLog(Levels::DBG, "Connection::CloseConnection: Error closing connection");
+    }
+  }
 
   uv_mutex_destroy(&this->invocationMutex);
 
@@ -50,6 +57,7 @@ Connection::~Connection()
 
   delete this->cbOpen;
   this->cbOpen = nullptr;
+  deferLog(Levels::SILLY, "Connection::~Connection [end]");
 }
 
 NAN_METHOD(Connection::New)
