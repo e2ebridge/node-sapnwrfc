@@ -34,6 +34,12 @@ SOFTWARE.
 #define nullptr NULL
 #endif
 
+#ifdef _MSC_VER
+#if _MSC_VER < 1900
+#define snprintf _snprintf_s
+#endif
+#endif
+
 #define ESCAPE_RFC_ERROR(...) scope.Escape(RfcError(__VA_ARGS__));
 #define RETURN_RFC_ERROR(...) info.GetReturnValue().Set(RfcError(__VA_ARGS__)); return;
 

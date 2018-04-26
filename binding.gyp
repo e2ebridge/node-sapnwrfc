@@ -58,9 +58,6 @@
            }],
           [ 'target_arch=="x64"' , {
 	           'defines': ['_AMD64_']
-           }],
-          [ 'MSVS_VERSION!="2015"' and 'MSVS_VERSION!="2017"' , {
-            'defines' : [ 'snprintf=_snprintf' ]
            }]
         ],
         'include_dirs': [
