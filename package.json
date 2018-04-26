@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "bindings": ">=0.3.0",
-    "nan": "^2.5.1"
+    "nan": "^2.9.2"
   },
   "devDependencies": {
     "gulp": "^3.9.0",
