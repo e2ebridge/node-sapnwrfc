@@ -226,6 +226,7 @@ v8::Local<v8::Value> Connection::CloseConnection(void)
 
   if (this->connectionHandle != nullptr) {
     rc = RfcCloseConnection(this->connectionHandle, &errorInfo);
+    this->connectionHandle = nullptr;
     LOG_API(this, "RfcCloseConnection");
     if (rc != RFC_OK) {
       log(Levels::DBG, "Connection::CloseConnection: Error closing connection");
