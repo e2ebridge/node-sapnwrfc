@@ -1,47 +1,54 @@
-cmake_minimum_required(VERSION 2.8.6)
-project(sapnwrfc.node)
+cmake_minimum_required(VERSION 3.5.0)
+project(sapnwrfc)
 
-add_definitions(-DBUILDING_NODE_EXTENSION)
-add_definitions(-D_LARGEFILE_SOURCE)
-add_definitions(-D_FILE_OFFSET_BITS=64)
-add_definitions(-DSAPwithUNICODE)
-add_definitions(-DSAPwithTHREADS)
-add_definitions(-DSAPonUNIX)
-add_definitions(-DSAPonLIN)
-add_definitions(-DSAPwithTHREADS)
-add_definitions(-D__NO_MATH_INLINES)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-link_directories(${NODE_ROOT}/lib)
-include_directories(${NODE_ROOT}/include/node)
-include_directories(${NODE_ROOT}/src)
-include_directories(${NODE_ROOT}/deps/v8/include)
+set(NWRFCSDK_ROOT "${PROJECT_SOURCE_DIR}/nwrfcsdk" CACHE PATH "Path the the root of SAP NW RFC SDK")
 
-include_directories(
-   "${CMAKE_CURRENT_SOURCE_DIR}"
-   ${PROJECT_SOURCE_DIR}/nwrfcsdk/include
-   ${PROJECT_SOURCE_DIR}/node_modules/nan
-)
+add_library(sapnwrfc::sapnwrfc SHARED IMPORTED)
+set_target_properties(sapnwrfc::sapnwrfc PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${NWRFCSDK_ROOT}/include"
+        IMPORTED_IMPLIB "${NWRFCSDK_ROOT}/lib/${CMAKE_IMPORT_LIBRARY_PREFIX}sapnwrfc${CMAKE_IMPORT_LIBRARY_SUFFIX}"
+        IMPORTED_LOCATION "${NWRFCSDK_ROOT}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}sapnwrfc${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
-link_directories(
-   ${PROJECT_SOURCE_DIR}/nwrfcsdk/lib
-)
+add_library(sapnwrfc::libsapucum SHARED IMPORTED)
+set_target_properties(sapnwrfc::libsapucum PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${NWRFCSDK_ROOT}/include"
+        IMPORTED_IMPLIB "${NWRFCSDK_ROOT}/lib/libsapucum${CMAKE_IMPORT_LIBRARY_SUFFIX}"
+        IMPORTED_LOCATION "${NWRFCSDK_ROOT}/lib/libsapucum${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
 set(Sources
-src/binding.cc
-src/current_function.hpp
-src/Common.h
-src/Loggable.h
-src/Loggable.cc
-src/Connection.h
-src/Connection.cc
-src/Function.h
-src/Function.cc
-examples/example1.js
+        src/binding.cc
+        src/current_function.hpp
+        src/Common.h
+        src/Connection.cc
+        src/Connection.h
+        src/Function.cc
+        src/Function.h
+        src/Loggable.cc
+        src/Loggable.h
+        examples/example1.js
 )
 
-add_library(sapnwrfc.node SHARED ${Sources})
-target_link_libraries(sapnwrfc.node sapnwrfc sapucum)
-set_target_properties(sapnwrfc.node PROPERTIES OUTPUT_NAME sapnwrfc
-                                             PREFIX ""
-                                             SUFFIX .node
-                                             LINK_FLAGS -rdynamic)
+add_library(node-sapnwrfc SHARED ${Sources} ${CMAKE_JS_SRC})
+
+target_compile_definitions(node-sapnwrfc PRIVATE SAPwithUNICODE SAPwithTHREADS)
+if(WIN32)
+  target_compile_definitions(node-sapnwrfc PRIVATE SAPonNT UNICODE _UNICODE NOMINMAX)
+  target_link_libraries(node-sapnwrfc PRIVATE delayimp)
+else()
+  target_compile_definitions(node-sapnwrfc PRIVATE SAPonUNIX SAPonLIN __NO_MATH_INLINES)
+  set_target_properties(node-sapnwrfc PROPERTIES LINK_FLAGS -rdynamic)
+endif()
+
+target_include_directories(node-sapnwrfc PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_JS_INC}")
+
+target_link_libraries(node-sapnwrfc PRIVATE sapnwrfc::sapnwrfc sapnwrfc::libsapucum ${CMAKE_JS_LIB})
+
+set_target_properties(node-sapnwrfc PROPERTIES
+        OUTPUT_NAME sapnwrfc
+        PREFIX ""
+        SUFFIX .node)
