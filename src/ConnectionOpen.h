@@ -1,7 +1,6 @@
 /*
 -----------------------------------------------------------------------------
-Copyright (c) 2011 Joachim Dorner
-Copyright (c) 2014-2019 Scheer E2E AG
+Copyright (c) 2016 Scheer E2E AG
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,15 +22,31 @@ SOFTWARE.
 -----------------------------------------------------------------------------
 */
 
+#ifndef SAPNWRFC_CONNECTIONOPEN_H
+#define SAPNWRFC_CONNECTIONOPEN_H
+
+
 #include <napi.h>
-
 #include "Connection.h"
-#include "Function.h"
 
-Napi::Object init(Napi::Env env, Napi::Object exports) {
-  Connection::Init(env, exports);
-  Function::Init(env, exports);
-  return exports;
-}
+class ConnectionOpen : public Napi::AsyncWorker {
+  public:
+    ConnectionOpen(const Napi::Function &callback, Connection *connection);
+    ConnectionOpen(const ConnectionOpen &) = delete;
+    ConnectionOpen &operator=(const ConnectionOpen &) = delete;
+    ConnectionOpen(ConnectionOpen &&) = default;
+    ConnectionOpen &operator=(ConnectionOpen &&) = default;
 
-NODE_API_MODULE(sapnwrfc, init);
+    ~ConnectionOpen() override;
+
+  protected:
+    void Execute() override;
+
+    void OnError(const Napi::Error &e) override;
+
+  private:
+    Connection *connection;
+};
+
+
+#endif //SAPNWRFC_CONNECTIONOPEN_H

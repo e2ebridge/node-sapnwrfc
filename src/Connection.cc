@@ -1,6 +1,7 @@
 /*
 -----------------------------------------------------------------------------
 Copyright (c) 2011 Joachim Dorner
+Copyright (c) 2014-2019 Scheer E2E AG
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,360 +25,266 @@ SOFTWARE.
 
 #include "Common.h"
 #include "Connection.h"
+#include "ConnectionOpen.h"
 #include "Function.h"
 
-Connection::Connection( v8::Handle<v8::Object> thisHandle) :
-  loginParamsSize(0),
-  loginParams(nullptr),
-  connectionHandle(nullptr)
-{
-  uv_mutex_init(&this->invocationMutex);
-  init( thisHandle);
+Napi::FunctionReference Connection::ctor;
+
+Connection::Connection(const Napi::CallbackInfo &info)
+    : Napi::ObjectWrap<Connection>(info) {
+  uv_mutex_init(&invocationMutex);
+  init(Value());
 }
 
-Connection::~Connection()
-{
+Connection::~Connection() {
   deferLog(Levels::SILLY, "Connection::~Connection");
 
-  if (this->connectionHandle != nullptr) {
-    RFC_RC rc = RfcCloseConnection(this->connectionHandle, &errorInfo);
+  if (connectionHandle != nullptr) {
+    RFC_RC rc = RfcCloseConnection(connectionHandle, &errorInfo);
     DEFER_LOG_API(this, "RfcCloseConnection");
     if (rc != RFC_OK) {
       deferLog(Levels::DBG, "Connection::CloseConnection: Error closing connection");
     }
   }
 
-  uv_mutex_destroy(&this->invocationMutex);
+  uv_mutex_destroy(&invocationMutex);
 
-  for (unsigned int i = 0; i < this->loginParamsSize; i++) {
-     free(const_cast<SAP_UC*>(loginParams[i].name));
-     free(const_cast<SAP_UC*>(loginParams[i].value));
+  for (unsigned int i = 0; i < loginParamsSize; i++) {
+    free(const_cast<SAP_UC *>(loginParams[i].name));
+    free(const_cast<SAP_UC *>(loginParams[i].value));
   }
   free(loginParams);
 
-  delete this->cbOpen;
-  this->cbOpen = nullptr;
   deferLog(Levels::SILLY, "Connection::~Connection [end]");
 }
 
-NAN_METHOD(Connection::New)
-{
-  if (!info.IsConstructCall()) {
-    Nan::ThrowError("Invalid call format. Please use the 'new' operator.");
-    return;
-  }
+Napi::Object Connection::Init(Napi::Env env, Napi::Object exports) {
 
-  Connection *self = new Connection( info.This());
+  auto con = DefineClass(env, "Connection", {
+      InstanceMethod("GetVersion", &Connection::GetVersion),
+      InstanceMethod("Open", &Connection::Open),
+      InstanceMethod("Close", &Connection::Close),
+      InstanceMethod("Ping", &Connection::Ping),
+      InstanceMethod("IsOpen", &Connection::IsOpen),
+      InstanceMethod("Lookup", &Connection::Lookup),
+      InstanceMethod("SetIniPath", &Connection::SetIniPath),
+  });
 
-  self->log(Levels::SILLY, "Connection object created");
-
-  info.GetReturnValue().Set(info.This());
-}
-
-NAN_MODULE_INIT(Connection::Init)
-{
-  Nan::HandleScope scope;
-
-  v8::Local<v8::FunctionTemplate> ctorTemplate = Nan::New<v8::FunctionTemplate>(New);
-  ctorTemplate->InstanceTemplate()->SetInternalFieldCount(1);
-  ctorTemplate->SetClassName(Nan::New("Connection").ToLocalChecked());
-
-  Nan::SetPrototypeMethod(ctorTemplate, "GetVersion", Connection::GetVersion);
-  Nan::SetPrototypeMethod(ctorTemplate, "Open", Connection::Open);
-  Nan::SetPrototypeMethod(ctorTemplate, "Close", Connection::Close);
-  Nan::SetPrototypeMethod(ctorTemplate, "Ping", Connection::Ping);
-  Nan::SetPrototypeMethod(ctorTemplate, "IsOpen", Connection::IsOpen);
-  Nan::SetPrototypeMethod(ctorTemplate, "Lookup", Connection::Lookup);
-  Nan::SetPrototypeMethod(ctorTemplate, "SetIniPath", Connection::SetIniPath);
-
-  Nan::Set(target, Nan::New("Connection").ToLocalChecked(), ctorTemplate->GetFunction());
+  ctor = Napi::Persistent(con);
+  ctor.SuppressDestruct();
+  exports.Set("Connection", con);
+  return exports;
 }
 
 /**
  * @return Array
  */
-NAN_METHOD(Connection::GetVersion)
-{
+Napi::Value Connection::GetVersion(const Napi::CallbackInfo &info) {
+  auto env = info.Env();
+  Napi::EscapableHandleScope scope{env};
+
   unsigned majorVersion, minorVersion, patchLevel;
-
   RfcGetVersion(&majorVersion, &minorVersion, &patchLevel);
-  v8::Local<v8::Array> versionInfo = Nan::New<v8::Array>(3);
+  auto versionInfo = Napi::Array::New(env, 3);
 
-  versionInfo->Set(0, Nan::New<v8::Integer>(majorVersion));
-  versionInfo->Set(1, Nan::New<v8::Integer>(minorVersion));
-  versionInfo->Set(2, Nan::New<v8::Integer>(patchLevel));
+  versionInfo.Set(uint32_t{0}, Napi::Number::New(env, majorVersion));
+  versionInfo.Set(uint32_t{1}, Napi::Number::New(env, minorVersion));
+  versionInfo.Set(uint32_t{2}, Napi::Number::New(env, patchLevel));
 
-  info.GetReturnValue().Set(versionInfo);
+  return scope.Escape(versionInfo);
 }
 
-NAN_METHOD(Connection::Open)
-{
-  Connection *self = node::ObjectWrap::Unwrap<Connection>(info.This());
+Napi::Value Connection::Open(const Napi::CallbackInfo &info) {
+  auto env = info.Env();
+  Napi::EscapableHandleScope scope{env};
 
-  self->log(Levels::VERBOSE, "opening new SAP connection");
+  log(env, Levels::VERBOSE, "opening new SAP connection");
 
   if (info.Length() < 2) {
-    Nan::ThrowError("Function expects 2 arguments");
-    return;
+    throw Napi::Error::New(env, "Function expects 2 arguments");
   }
-  if (!info[0]->IsObject()) {
-    Nan::ThrowError("Argument 1 must be an object");
-    return;
+  if (!info[0].IsObject()) {
+    throw Napi::TypeError::New(env, "Argument 1 must be an object");
   }
-  if (!info[1]->IsFunction()) {
-    Nan::ThrowError("Argument 2 must be a function");
-    return;
+  if (!info[1].IsFunction()) {
+    throw Napi::TypeError::New(env, "Argument 2 must be a function");
   }
 
-  v8::Local<v8::Object> optionsObj = info[0]->ToObject();
-  v8::Local<v8::Array> props = optionsObj->GetPropertyNames();
+  auto optionsObj = info[0].ToObject();
+  auto props = optionsObj.GetPropertyNames();
 
-  self->loginParamsSize = props->Length();
-  self->loginParams = static_cast<RFC_CONNECTION_PARAMETER*>(malloc(self->loginParamsSize * sizeof(RFC_CONNECTION_PARAMETER)));
-  memset(self->loginParams, 0, self->loginParamsSize * sizeof(RFC_CONNECTION_PARAMETER));
-  memset(&self->errorInfo, 0, sizeof(RFC_ERROR_INFO));
+  loginParamsSize = props.Length();
+  loginParams = static_cast<RFC_CONNECTION_PARAMETER *>(malloc(loginParamsSize * sizeof(RFC_CONNECTION_PARAMETER)));
+  memset(loginParams, 0, loginParamsSize * sizeof(RFC_CONNECTION_PARAMETER));
+  memset(&errorInfo, 0, sizeof(RFC_ERROR_INFO));
 
-  self->log(Levels::DBG, "Connection params", optionsObj);
+  log(env, Levels::DBG, "Connection params", optionsObj);
 
-  for (unsigned int i = 0; i < self->loginParamsSize; i++) {
-    v8::Local<v8::Value> name = props->Get(i);
-    v8::Local<v8::Value> value = optionsObj->Get(name->ToString());
+  for (unsigned int i = 0; i < loginParamsSize; i++) {
+    auto name = props.Get(i);
+    auto value = optionsObj.Get(name);
 
-    self->loginParams[i].name = convertToSAPUC(name);
-    self->loginParams[i].value = convertToSAPUC(value);
+    loginParams[i].name = convertToSAPUC(name.ToString());
+    loginParams[i].value = convertToSAPUC(value.ToString());
 
 #ifndef NDEBUG
-    std::cout << convertToString(name) << "--> " << convertToString(value) << std::endl;
+    std::cout << name.ToString().Utf8Value() << "--> " << value.ToString().Utf8Value() << std::endl;
 #endif
   }
 
   // Store callback
-  self->cbOpen = new Nan::Callback(v8::Local<v8::Function>::Cast(info[1]));
-  self->Ref();
-
-  uv_work_t* req = new uv_work_t();
-  req->data = self;
-  uv_queue_work(uv_default_loop(), req, EIO_Open, (uv_after_work_cb)EIO_AfterOpen);
-#if !NODE_VERSION_AT_LEAST(0, 7, 9)
-    uv_ref(uv_default_loop());
-#endif
+  auto callback = info[1].As<Napi::Function>();
+  auto worker = new ConnectionOpen{callback, this};
+  worker->Queue();
+  Reference::Ref();
+  return env.Undefined();
 }
 
-void Connection::EIO_Open(uv_work_t *req)
-{
-  Connection *self = static_cast<Connection*>(req->data);
-
-  self->connectionHandle = RfcOpenConnection(self->loginParams, self->loginParamsSize, &self->errorInfo);
-  DEFER_LOG_API(self, "RfcOpenConnection");
+Napi::Value Connection::Close(const Napi::CallbackInfo &info) {
+  auto env = info.Env();
+  Napi::EscapableHandleScope scope{env};
+  log(env, Levels::SILLY, "Connection::Close");
+  return scope.Escape(CloseConnection(env));
 }
 
-void Connection::EIO_AfterOpen(uv_work_t *req)
-{
-  Nan::HandleScope scope;
-  int isValid;
-  Connection *self = static_cast<Connection*>(req->data);
+Napi::Value Connection::CloseConnection(Napi::Env env) {
+  Napi::EscapableHandleScope scope{env};
 
-  v8::Local<v8::Value> argv[1];
-  argv[0] = Nan::Null();
-
-  if (self->connectionHandle == nullptr) {
-    self->log(Levels::DBG, "Connection handle is NULL, connection failed");
-    argv[0] = RfcError(self->errorInfo);
-  } else {
-    RfcIsConnectionHandleValid(self->connectionHandle, &isValid, &self->errorInfo);
-    LOG_API(self, "RfcIsConnectionHandleValid");
-    if (!isValid) {
-      self->log(Levels::SILLY, "Connection not valid");
-      argv[0] = RfcError(self->errorInfo);
-    } else {
-      self->log(Levels::SILLY, "Connection still valid");
-    }
-  }
-
-  Nan::TryCatch try_catch;
-
-  self->log(Levels::SILLY, "EIO_AfterOpen: About to call the callback");
-  assert(!self->cbOpen->IsEmpty());
-  self->cbOpen->Call(1, argv);
-  delete self->cbOpen;
-  self->cbOpen = nullptr;
-  self->Unref();
-  self->log(Levels::SILLY, "EIO_AfterOpen: Finished callback");
-
-  if (try_catch.HasCaught()) {
-    self->log(Levels::ERR, "EIO_AfterOpen: Exception thrown in callback. Abort.");
-    Nan::FatalException(try_catch);
-  }
-}
-
-NAN_METHOD(Connection::Close)
-{
-  Connection *self = node::ObjectWrap::Unwrap<Connection>(info.This());
-  self->log(Levels::SILLY, "Connection::Close");
-  info.GetReturnValue().Set(self->CloseConnection());
-}
-
-v8::Local<v8::Value> Connection::CloseConnection(void)
-{
-  Nan::EscapableHandleScope scope;
-  RFC_RC rc = RFC_OK;
-
-  log(Levels::SILLY, "Connection::CloseConnection");
+  log(env, Levels::SILLY, "Connection::CloseConnection");
 
   if (this->connectionHandle != nullptr) {
-    rc = RfcCloseConnection(this->connectionHandle, &errorInfo);
+    RfcCloseConnection(this->connectionHandle, &errorInfo);
     this->connectionHandle = nullptr;
-    LOG_API(this, "RfcCloseConnection");
-    if (rc != RFC_OK) {
-      log(Levels::DBG, "Connection::CloseConnection: Error closing connection");
-      return scope.Escape(RfcError(errorInfo));
+    LOG_API(env, this, "RfcCloseConnection");
+    if (errorInfo.code != RFC_OK) {
+      log(env, Levels::DBG, "Connection::CloseConnection: Error closing connection");
+      return scope.Escape(RfcError(env, errorInfo).Value());
     }
   }
 
-  return scope.Escape(Nan::True());
+  return scope.Escape(Napi::Boolean::New(env, true));
 }
 
-RFC_CONNECTION_HANDLE Connection::GetConnectionHandle(void)
-{
+RFC_CONNECTION_HANDLE Connection::GetConnectionHandle(void) {
   return this->connectionHandle;
 }
 
-void Connection::LockMutex(void)
-{
+void Connection::LockMutex(void) {
   uv_mutex_lock(&this->invocationMutex);
 }
 
-void Connection::UnlockMutex(void)
-{
+void Connection::UnlockMutex(void) {
   uv_mutex_unlock(&this->invocationMutex);
 }
 
-void Connection::addObjectInfoToLogMeta(v8::Local<v8::Object> meta)
-{
-  char ptr[ 2 + sizeof(void*)*2 + 1]; // optional "0x" + each byte of pointer represented by 2 digits + terminator
-  snprintf( ptr, 2 + sizeof(void*)*2 + 1, "%p", this);
-  meta->Set(Nan::New<v8::String>("nativeConnection").ToLocalChecked(),
-            Nan::New<v8::String>(ptr).ToLocalChecked());
+void Connection::addObjectInfoToLogMeta(Napi::Object meta) {
+  char ptr[2 + sizeof(void *) * 2 + 1]; // optional "0x" + each byte of pointer represented by 2 digits + terminator
+  snprintf(ptr, 2 + sizeof(void *) * 2 + 1, "%p", this);
+  meta.Set("nativeConnection", ptr);
 }
 
-NAN_METHOD(Connection::IsOpen)
-{
-  Connection *self = node::ObjectWrap::Unwrap<Connection>(info.This());
-  RFC_RC rc = RFC_OK;
+Napi::Value Connection::IsOpen(const Napi::CallbackInfo &info) {
+  auto env = info.Env();
+  Napi::EscapableHandleScope scope{env};
+
+  log(env, Levels::SILLY, "Connection::IsOpen");
+
   int isValid;
-
-  self->log(Levels::SILLY, "Connection::IsOpen");
-
-  rc = RfcIsConnectionHandleValid(self->connectionHandle, &isValid, &self->errorInfo);
-  LOG_API(self, "RfcIsConnectionHandleValid");
-  if(!isValid) {
-    self->log(Levels::SILLY, "Connection::IsOpen: RfcIsConnectionHandleValid returned false");
-    info.GetReturnValue().Set(Nan::False());
+  RfcIsConnectionHandleValid(connectionHandle, &isValid, &errorInfo);
+  LOG_API(env, this, "RfcIsConnectionHandleValid");
+  if (!isValid) {
+    log(env, Levels::SILLY, "Connection::IsOpen: RfcIsConnectionHandleValid returned false");
   } else {
-    self->log(Levels::SILLY, "Connection::IsOpen: RfcIsConnectionHandleValid returned true");
-    info.GetReturnValue().Set(Nan::True());
+    log(env, Levels::SILLY, "Connection::IsOpen: RfcIsConnectionHandleValid returned true");
   }
-
+  return scope.Escape(Napi::Boolean::New(env, static_cast<bool>(isValid)));
 }
 
 /**
  *
  * @return true if successful, else: RfcException
  */
-NAN_METHOD(Connection::Ping)
-{
-  Connection *self = node::ObjectWrap::Unwrap<Connection>(info.This());
-  RFC_RC rc = RFC_OK;
+Napi::Value Connection::Ping(const Napi::CallbackInfo &info) {
+  auto env = info.Env();
+  Napi::EscapableHandleScope scope{env};
 
-  self->log(Levels::SILLY, "Connection::IsOpen");
+  log(env, Levels::SILLY, "Connection::IsOpen");
 
   if (info.Length() > 0) {
-    Nan::ThrowError("No arguments expected");
-    return;
+    throw Napi::Error::New(env, "No arguments expected");
   }
 
-  rc = RfcPing(self->connectionHandle, &self->errorInfo);
-  LOG_API(self, "RfcPing");
-  if (rc != RFC_OK) {
-    RETURN_RFC_ERROR(self->errorInfo);
+  RfcPing(connectionHandle, &errorInfo);
+  LOG_API(env, this, "RfcPing");
+  if (errorInfo.code != RFC_OK) {
+    return scope.Escape(RfcError(Env(), errorInfo).Value());
   }
 
-  info.GetReturnValue().Set(Nan::True());
+  return scope.Escape(Napi::Boolean::New(env, true));
 }
 
 /**
  *
  * @return Function
  */
-NAN_METHOD(Connection::Lookup)
-{
-  int isValid;
-
-  Connection *self = node::ObjectWrap::Unwrap<Connection>(info.This());
-
-  self->log(Levels::SILLY, "Connection::Lookup");
+Napi::Value Connection::Lookup(const Napi::CallbackInfo &info) {
+  auto env = info.Env();
+  Napi::EscapableHandleScope scope{env};
+  log(env, Levels::SILLY, "Connection::Lookup");
 
   if (info.Length() < 1 || info.Length() > 2) {
-    Nan::ThrowError("Function expects 1 or 2 arguments");
-    return;
+    throw Napi::Error::New(env, "Function expects 1 or 2 arguments");
   }
-  if (!info[0]->IsString()) {
-    Nan::ThrowError("Argument 1 must be function module name");
-    return;
+  if (!info[0].IsString()) {
+    throw Napi::TypeError::New(env, "Argument 1 must be function module name");
   }
-
-  if (info.Length() > 1 && !info[1]->IsObject()) {
-    Nan::ThrowError("Argument 2 must be an object");
-    return;
+  if (info.Length() > 1 && !info[1].IsObject()) {
+    throw Napi::TypeError::New(env, "Argument 2 must be an object");
   }
 
-  RfcIsConnectionHandleValid(self->connectionHandle, &isValid, &self->errorInfo);
-  LOG_API(self, "RfcIsConnectionHandleValid");
+  bool refreshMeta = info.Length() > 1 && info[1].ToObject().Get("refreshMeta").ToBoolean();
+  auto functionName = info[0].ToString().Utf16Value();
+
+  int isValid{};
+  RfcIsConnectionHandleValid(connectionHandle, &isValid, &errorInfo);
+  LOG_API(env, this, "RfcIsConnectionHandleValid");
   if (!isValid) {
-    self->log(Levels::SILLY, "Connection::Lookup: RfcIsConnectionHandleValid returned false");
-    Nan::ThrowError(RfcError(self->errorInfo));
-    return;
+    log(env, Levels::SILLY, "Connection::Lookup: RfcIsConnectionHandleValid returned false");
+    throw RfcError(env, errorInfo);
   } else {
-    self->log(Levels::SILLY, "Connection::Lookup: RfcIsConnectionHandleValid returned true");
+    log(env, Levels::SILLY, "Connection::Lookup: RfcIsConnectionHandleValid returned true");
   }
 
-  self->log(Levels::SILLY, "Connection::Lookup: About to create function instance");
-  v8::Local<v8::Value> f = Function::NewInstance(*self, info);
-  if( IsException(f)) {
-    self->log(Levels::DBG, "Connection::Lookup: Unable to create function instance");
-    Nan::ThrowError(f);
-  }
-  info.GetReturnValue().Set(f);
+  log(env, Levels::SILLY, "Connection::Lookup: About to create function instance");
+  auto jsf = Function::NewInstance(env, *this).As<Napi::Object>();
+  Napi::ObjectWrap<Function>::Unwrap(jsf)->Lookup(env, functionName, refreshMeta);
+  return scope.Escape(jsf);
 }
 
 /**
  *
  * @return true if successful, else: RfcException
  */
-NAN_METHOD(Connection::SetIniPath)
-{
-  Connection *self = node::ObjectWrap::Unwrap<Connection>(info.This());
+Napi::Value Connection::SetIniPath(const Napi::CallbackInfo &info) {
+  auto env = info.Env();
+  Napi::EscapableHandleScope scope{env};
 
-  self->log(Levels::SILLY, "Connection::SetIniPath");
+  log(env, Levels::SILLY, "Connection::SetIniPath");
 
   if (info.Length() != 1) {
-    Nan::ThrowError("Function expects 1 argument");
-    return;
+    throw Napi::Error::New(env, "Function expects 1 argument");
   }
-  if (!info[0]->IsString()) {
-    Nan::ThrowError("Argument 1 must be a path name");
-    return;
+  if (!info[0].IsString()) {
+    throw Napi::TypeError::New(env, "Argument 1 must be a path name");
   }
 
-  v8::Local<v8::Value> iniPath = info[0]->ToString();
-
-  RfcSetIniPath(convertToSAPUC(iniPath), &self->errorInfo);
-  LOG_API(self, "RfcSetIniPath");
-  if (self->errorInfo.code) {
-    self->log(Levels::DBG, "Connection::SetIniPath: RfcSetIniPath failed");
-    Nan::ThrowError(RfcError(self->errorInfo));
-    return;
+  RfcSetIniPath(reinterpret_cast<const SAP_UC *>(info[0].ToString().Utf16Value().c_str()),
+                &errorInfo);
+  LOG_API(env, this, "RfcSetIniPath");
+  if (errorInfo.code) {
+    log(env, Levels::DBG, "Connection::SetIniPath: RfcSetIniPath failed");
+    throw RfcError(env, errorInfo);
   }
 
-  info.GetReturnValue().Set(Nan::True());
+  return scope.Escape(Napi::Boolean::New(env, true));
 }

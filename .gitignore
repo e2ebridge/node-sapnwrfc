@@ -3,6 +3,7 @@
 .node-gyp
 .vscode
 build
+build-*
 build.sh
 dev_rfc.trc
 node_modules

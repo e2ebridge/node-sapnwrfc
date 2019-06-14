@@ -1,7 +1,6 @@
 /*
 -----------------------------------------------------------------------------
-Copyright (c) 2011 Joachim Dorner
-Copyright (c) 2014-2019 Scheer E2E AG
+Copyright (c) 2016 Scheer E2E AG
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,15 +22,35 @@ SOFTWARE.
 -----------------------------------------------------------------------------
 */
 
-#include <napi.h>
+#ifndef SAPNWRFC_FUNCTIONINVOKE_H
+#define SAPNWRFC_FUNCTIONINVOKE_H
 
+#include <napi.h>
 #include "Connection.h"
 #include "Function.h"
 
-Napi::Object init(Napi::Env env, Napi::Object exports) {
-  Connection::Init(env, exports);
-  Function::Init(env, exports);
-  return exports;
-}
+class FunctionInvoke : public Napi::AsyncWorker {
+  public:
+    FunctionInvoke(const Napi::Function &callback, Connection *connection, Function *function,
+                   RFC_DATA_CONTAINER *functionHandle);
+    FunctionInvoke(const FunctionInvoke &) = delete;
+    FunctionInvoke &operator=(const FunctionInvoke &) = delete;
+    FunctionInvoke(FunctionInvoke &&) = default;
+    FunctionInvoke &operator=(FunctionInvoke &&) = default;
 
-NODE_API_MODULE(sapnwrfc, init);
+    virtual ~FunctionInvoke();
+
+  protected:
+    void Execute() override;
+    void OnOK() override;
+    void OnError(const Napi::Error &e) override;
+
+
+  private:
+    Connection *connection;
+    Function *function;
+    RFC_FUNCTION_HANDLE functionHandle;
+};
+
+
+#endif //SAPNWRFC_FUNCTIONINVOKE_H

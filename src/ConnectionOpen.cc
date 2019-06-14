@@ -23,15 +23,36 @@ SOFTWARE.
 -----------------------------------------------------------------------------
 */
 
-#include <napi.h>
+#include "ConnectionOpen.h"
+#include <sapnwrfc.h>
 
-#include "Connection.h"
-#include "Function.h"
+ConnectionOpen::ConnectionOpen(const Napi::Function &callback, Connection *connection)
+    : AsyncWorker{callback}, connection{connection} {}
 
-Napi::Object init(Napi::Env env, Napi::Object exports) {
-  Connection::Init(env, exports);
-  Function::Init(env, exports);
-  return exports;
+void ConnectionOpen::Execute() {
+  connection->connectionHandle = RfcOpenConnection(connection->loginParams,
+                                                   connection->loginParamsSize,
+                                                   &connection->errorInfo);
+  DEFER_LOG_API(connection, "RfcOpenConnection");
+  if (!connection->connectionHandle) {
+    SetError("Connection handle is NULL, connection failed");
+  } else {
+    int isValid{};
+    RfcIsConnectionHandleValid(connection->connectionHandle, &isValid, &connection->errorInfo);
+    DEFER_LOG_API(connection, "RfcIsConnectionHandleValid");
+    if (!isValid) {
+      connection->deferLog(Loggable::Levels::SILLY, "Connection not valid");
+      SetError("Connection not valid");
+    } else {
+      connection->deferLog(Loggable::Levels::SILLY, "Connection still valid");
+    }
+  }
 }
 
-NODE_API_MODULE(sapnwrfc, init);
+void ConnectionOpen::OnError(const Napi::Error &e) {
+  Callback().Call({RfcError(Env(), connection->errorInfo).Value()});
+}
+
+ConnectionOpen::~ConnectionOpen() {
+  connection->Reference::Unref();
+}

@@ -19,16 +19,20 @@ set_target_properties(sapnwrfc::libsapucum PROPERTIES
         IMPORTED_LOCATION "${NWRFCSDK_ROOT}/lib/libsapucum${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
 set(Sources
-        src/binding.cc
-        src/current_function.hpp
-        src/Common.h
-        src/Connection.cc
-        src/Connection.h
-        src/Function.cc
-        src/Function.h
-        src/Loggable.cc
-        src/Loggable.h
-        examples/example1.js
+  src/binding.cc
+  src/current_function.hpp
+  src/Common.h
+  src/Connection.cc
+  src/Connection.h
+  src/ConnectionOpen.cc
+  src/ConnectionOpen.h
+  src/Function.cc
+  src/Function.h
+  src/FunctionInvoke.cc
+  src/FunctionInvoke.h
+  src/Loggable.cc
+  src/Loggable.h
+  examples/example1.js
 )
 
 add_library(node-sapnwrfc SHARED ${Sources} ${CMAKE_JS_SRC})
@@ -42,9 +46,17 @@ else()
   set_target_properties(node-sapnwrfc PROPERTIES LINK_FLAGS -rdynamic)
 endif()
 
+# Include N-API wrappers
+execute_process(COMMAND node -p "require('node-addon-api').include"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE NODE_ADDON_API_DIR )
+string(REPLACE "\n" "" NODE_ADDON_API_DIR ${NODE_ADDON_API_DIR})
+string(REPLACE "\"" "" NODE_ADDON_API_DIR ${NODE_ADDON_API_DIR})
+
 target_include_directories(node-sapnwrfc PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}"
-        "${CMAKE_JS_INC}")
+   "${CMAKE_CURRENT_SOURCE_DIR}"
+   "${CMAKE_JS_INC}"
+   "${NODE_ADDON_API_DIR}")
 
 target_link_libraries(node-sapnwrfc PRIVATE sapnwrfc::sapnwrfc sapnwrfc::libsapucum ${CMAKE_JS_LIB})
 

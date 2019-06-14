@@ -1,6 +1,7 @@
 /*
 -----------------------------------------------------------------------------
 Copyright (c) 2011 Joachim Dorner
+Copyright (c) 2014-2019 Scheer E2E AG
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -30,42 +31,37 @@ SOFTWARE.
 #include <sapnwrfc.h>
 #include <iostream>
 
-class Connection : public Loggable
-{
-  friend class Function;
+class Connection : public Loggable, public Napi::ObjectWrap<Connection> {
+    friend class Function;
+    friend class FunctionInvoke;
+    friend class ConnectionOpen;
 
   public:
-
-    static NAN_MODULE_INIT(Init);
+    static Napi::Object Init(Napi::Env env, Napi::Object exports);
+    explicit Connection(const Napi::CallbackInfo &info);
+    ~Connection();
 
   protected:
+    Napi::Value GetVersion(const Napi::CallbackInfo &info);
+    Napi::Value Open(const Napi::CallbackInfo &info);
+    Napi::Value Close(const Napi::CallbackInfo &info);
+    Napi::Value Ping(const Napi::CallbackInfo &info);
+    Napi::Value Lookup(const Napi::CallbackInfo &info);
+    Napi::Value IsOpen(const Napi::CallbackInfo &info);
+    Napi::Value SetIniPath(const Napi::CallbackInfo &info);
 
-    Connection( v8::Handle<v8::Object> thisHandle);
-    ~Connection();
-    static NAN_METHOD(GetVersion);
-    static NAN_METHOD(New);
-    static NAN_METHOD(Open);
-    static NAN_METHOD(Close);
-    static NAN_METHOD(Ping);
-    static NAN_METHOD(Lookup);
-    static NAN_METHOD(IsOpen);
-    static NAN_METHOD(SetIniPath);
-
-    static void EIO_Open(uv_work_t *req);
-    static void EIO_AfterOpen(uv_work_t *req);
-
-    v8::Local<v8::Value> CloseConnection(void);
+    Napi::Value CloseConnection(Napi::Env env);
 
     RFC_CONNECTION_HANDLE GetConnectionHandle(void);
     void LockMutex(void);
     void UnlockMutex(void);
-    void addObjectInfoToLogMeta(v8::Local<v8::Object> meta);
+    void addObjectInfoToLogMeta(Napi::Object meta) override;
 
-    unsigned int loginParamsSize;
-    RFC_CONNECTION_PARAMETER *loginParams;
-    RFC_ERROR_INFO errorInfo;
-    RFC_CONNECTION_HANDLE connectionHandle;
-    Nan::Callback *cbOpen;
+    unsigned int loginParamsSize{};
+    RFC_CONNECTION_PARAMETER *loginParams{};
+    RFC_ERROR_INFO errorInfo{};
+    RFC_CONNECTION_HANDLE connectionHandle{};
+    static Napi::FunctionReference ctor;
 
     uv_mutex_t invocationMutex;
 };

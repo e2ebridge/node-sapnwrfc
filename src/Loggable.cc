@@ -26,7 +26,7 @@ SOFTWARE.
 #include <algorithm>
 
 const std::string Loggable::Levels::SILLY	= "silly";
-const std::string Loggable::Levels::DBG		= "debug";
+const std::string Loggable::Levels::DBG	= "debug";
 const std::string Loggable::Levels::VERBOSE	= "verbose";
 const std::string Loggable::Levels::INFO	= "info";
 const std::string Loggable::Levels::WARN	= "warn";
@@ -34,172 +34,100 @@ const std::string Loggable::Levels::ERR	= "error";
 
 const std::string Loggable::API_CALL_MESSAGE	= "SAPNWRFC API Call";
 
-v8::Local<v8::Value> metaToJS( const Loggable::LogEntry::Meta& meta)
-{
-  Nan::EscapableHandleScope scope;
+Napi::Value metaToJS(Napi::Env env, const Loggable::LogEntry::Meta &meta) {
+  Napi::EscapableHandleScope scope{env};
 
-  v8::Local<v8::Object> result = Nan::New<v8::Object>();
+  auto result = Napi::Object::New(env);
 
-  for( Loggable::LogEntry::Meta::const_iterator it = meta.begin(), eit = meta.end(); it != eit; ++it)
-  {
-    result->Set(
-		Nan::New<v8::String>(it->first).ToLocalChecked(),
-		Nan::New<v8::String>(it->second).ToLocalChecked()
-    );
+  for (const auto &entry : meta) {
+    result.Set(entry.first, entry.second);
   }
 
   return scope.Escape(result);
 }
 
-static v8::Local<v8::Value> errorInfoToJS(const RFC_ERROR_INFO &info)
-{
-  Nan::EscapableHandleScope scope;
+static Napi::Value errorInfoToJS(Napi::Env env, const RFC_ERROR_INFO &info) {
+  Napi::EscapableHandleScope scope{env};
 
-  v8::Local<v8::Object> obj = Nan::New<v8::Object>();
-  obj->Set(
-      Nan::New<v8::String>("code").ToLocalChecked(),
-      Nan::New<v8::Integer>(info.code)
-  );
-  obj->Set(
-      Nan::New<v8::String>("group").ToLocalChecked(),
-      Nan::New<v8::Integer>(info.group)
-  );
-  obj->Set(
-      Nan::New<v8::String>("key").ToLocalChecked(),
-      Nan::New<v8::String>((const uint16_t*)(info.key)).ToLocalChecked()
-  );
-  obj->Set(
-      Nan::New<v8::String>("class").ToLocalChecked(),
-      Nan::New<v8::String>((const uint16_t*)(info.abapMsgClass)).ToLocalChecked()
-  );
-  obj->Set(
-      Nan::New<v8::String>("type").ToLocalChecked(),
-      Nan::New<v8::String>((const uint16_t*)(info.abapMsgType)).ToLocalChecked()
-  );
-  obj->Set(
-      Nan::New<v8::String>("number").ToLocalChecked(),
-      Nan::New<v8::String>((const uint16_t*)(info.abapMsgNumber)).ToLocalChecked()
-  );
-  obj->Set(
-      Nan::New<v8::String>("msgv1").ToLocalChecked(),
-      Nan::New<v8::String>((const uint16_t*)(info.abapMsgV1)).ToLocalChecked()
-  );
-  obj->Set(
-      Nan::New<v8::String>("msgv2").ToLocalChecked(),
-      Nan::New<v8::String>((const uint16_t*)(info.abapMsgV2)).ToLocalChecked()
-  );
-  obj->Set(
-      Nan::New<v8::String>("msgv3").ToLocalChecked(),
-      Nan::New<v8::String>((const uint16_t*)(info.abapMsgV3)).ToLocalChecked()
-  );
-  obj->Set(
-      Nan::New<v8::String>("msgv4").ToLocalChecked(),
-      Nan::New<v8::String>((const uint16_t*)(info.abapMsgV4)).ToLocalChecked()
-  );
-
+  auto obj = Napi::Object::New(env);
+  FillRfcInfo(env, info, obj);
   return scope.Escape(obj);
 }
 
-Loggable::~Loggable()
-{
+void Loggable::init(Napi::Object thisHandle) {
+  logFunction = Napi::Persistent(thisHandle.Get("_log").As<Napi::Function>());
 }
 
-void Loggable::init(v8::Handle<v8::Object> thisHandle)
-{
-    Wrap( thisHandle);
-
-    logFunction =
-        Nan::Persistent<v8::Function, v8::CopyablePersistentTraits<v8::Function>>(
-          v8::Local<v8::Function>::Cast(
-                    Nan::Get(handle(),
-                             Nan::New<v8::String>("_log").ToLocalChecked()).ToLocalChecked()));
+void Loggable::log(Napi::Env env, const std::string &level, const std::string &message) {
+  Napi::HandleScope scope{env};
+  log(env, level, Napi::String::New(env, message));
 }
 
-void Loggable::log(const std::string& level, const std::string& message)
-{
-  Nan::HandleScope scope;
-  log(level, Nan::New<v8::String>(message).ToLocalChecked());
+void Loggable::log(Napi::Env env, const std::string &level, Napi::Value message) {
+  Napi::HandleScope scope{env};
+  log(env, level, message, env.Undefined());
 }
 
-void Loggable::log(const std::string& level, v8::Local<v8::Value> message)
-{
-  Nan::HandleScope scope;
-  log(level, message, Nan::Undefined());
+void Loggable::log(Napi::Env env, const std::string &level, const std::string &message, Napi::Value meta) {
+  Napi::HandleScope scope{env};
+  log(env, level, Napi::String::New(env, message), meta);
 }
 
-void Loggable::log(const std::string& level, const std::string& message, v8::Local<v8::Value> meta)
-{
-  Nan::HandleScope scope;
-  log(level, Nan::New<v8::String>(message).ToLocalChecked(), meta);
+void Loggable::log(Napi::Env env, const std::string &level, Napi::Value message, Napi::Value meta) {
+  logDeferred(env);
+  log_(env, level, message, meta);
 }
 
-void Loggable::log(const std::string& level, v8::Local<v8::Value> message, v8::Local<v8::Value> meta)
-{
-  logDeferred();
-  log_(level, message, meta);
-}
+void Loggable::log_(Napi::Env env, const std::string &level, Napi::Value message, Napi::Value meta) {
+  Napi::HandleScope scope{env};
 
-void Loggable::log_(const std::string& level, v8::Local<v8::Value> message, v8::Local<v8::Value> meta)
-{
-  Nan::HandleScope scope;
-  v8::Local<v8::Value> argv[3];
-  argv[0] = Nan::New<v8::String>(level).ToLocalChecked();
-  argv[1] = message->ToString();
-
-  if(meta.IsEmpty() || meta->IsUndefined()) {
-      meta = Nan::New<v8::Object>();
+  if (meta.IsEmpty() || meta.IsUndefined()) {
+    meta = Napi::Object::New(env);
   }
 
-  addObjectInfoToLogMeta(meta->ToObject());
-  argv[2] = meta;
-
-  assert(!logFunction.IsEmpty());
-  auto functionHandle = Nan::New(logFunction);
-  Nan::Call(functionHandle, functionHandle, 3, argv);
+  addObjectInfoToLogMeta(meta.ToObject());
+  logFunction({Napi::String::New(env, level), message, meta});
 }
 
-void Loggable::log(const LogEntry& logEntry)
-{
-  Nan::HandleScope scope;
+void Loggable::log(Napi::Env env, const LogEntry &logEntry) {
+  Napi::HandleScope scope{env};
 
-  v8::Handle<v8::Object> meta;
-  if(!logEntry.call.empty()) {
-    meta = v8::Handle<v8::Object>::Cast( metaToJS( logEntry.meta));
-    meta->Set(Nan::New<v8::String>("call").ToLocalChecked(), Nan::New<v8::String>(logEntry.call).ToLocalChecked());
-    meta->Set(Nan::New<v8::String>("errorInfo").ToLocalChecked(), errorInfoToJS(logEntry.errorInfo));
+  Napi::Object meta;
+  if (!logEntry.call.empty()) {
+    meta = metaToJS(env, logEntry.meta).As<Napi::Object>();
+    meta.Set("call", logEntry.call);
+    meta.Set("errorInfo", errorInfoToJS(env, logEntry.errorInfo));
   } else {
-    meta = Nan::New<v8::Object>();
+    meta = Napi::Object::New(env);
   }
 
-  if(!logEntry.file.empty()) {
-    meta->Set(Nan::New<v8::String>("file").ToLocalChecked(), Nan::New<v8::String>(logEntry.file).ToLocalChecked());
+  if (!logEntry.file.empty()) {
+    meta.Set("file", logEntry.file);
   }
 
-  if(!logEntry.function.empty()) {
-    meta->Set(Nan::New<v8::String>("function").ToLocalChecked(), Nan::New<v8::String>(logEntry.function).ToLocalChecked());
+  if (!logEntry.function.empty()) {
+    meta.Set("function", logEntry.function);
   }
 
-  if(logEntry.line) {
-    meta->Set(Nan::New<v8::String>("line").ToLocalChecked(), Nan::New<v8::Integer>(logEntry.line));
+  if (logEntry.line) {
+    meta.Set("line", logEntry.line);
   }
 
-  log_(logEntry.level, Nan::New<v8::String>(logEntry.message).ToLocalChecked(), meta);
+  log_(env, logEntry.level, Napi::String::From(env, logEntry.message), meta);
 }
 
-void Loggable::deferLog(const std::string& level, const std::string& message, const Loggable::LogEntry::Meta& meta)
-{
+void Loggable::deferLog(const std::string &level, const std::string &message, const Loggable::LogEntry::Meta &meta) {
   LogEntry entry;
   entry.level = level;
   entry.message = message;
   entry.meta = meta;
-  deferredLogs.push_back( entry);
+  deferredLogs.push_back(entry);
 }
 
-void Loggable::createAPILogEntry_(Loggable::LogEntry& logEntry, const std::string& call,
-                                  const std::string& file, const std::string& function,
-                                  unsigned long line, RFC_ERROR_INFO& errorInfo,
-                                  const Loggable::LogEntry::Meta& meta)
-{
+void Loggable::createAPILogEntry_(Loggable::LogEntry &logEntry, const std::string &call,
+                                  const std::string &file, const std::string &function,
+                                  unsigned long line, RFC_ERROR_INFO &errorInfo,
+                                  const Loggable::LogEntry::Meta &meta) {
   logEntry.level = Levels::DBG;
   logEntry.message = API_CALL_MESSAGE;
   logEntry.call = call;
@@ -210,45 +138,38 @@ void Loggable::createAPILogEntry_(Loggable::LogEntry& logEntry, const std::strin
   logEntry.meta = meta;
 }
 
-void Loggable::logAPICall(const std::string& call, const std::string& file, const std::string& function,
-                          unsigned long line, RFC_ERROR_INFO& errorInfo)
-{
-  logAPICall(call, file, function, line, errorInfo, LogEntry::Meta());
+void Loggable::logAPICall(Napi::Env env, const std::string &call, const std::string &file, const std::string &function,
+                          unsigned long line, RFC_ERROR_INFO &errorInfo) {
+  logAPICall(env, call, file, function, line, errorInfo, LogEntry::Meta());
 }
 
-void Loggable::logAPICall(const std::string& call, const std::string& file, const std::string& function,
-                          unsigned long line, RFC_ERROR_INFO& errorInfo, const Loggable::LogEntry::Meta& meta)
-{
-  logDeferred();
+void Loggable::logAPICall(Napi::Env env, const std::string &call, const std::string &file, const std::string &function,
+                          unsigned long line, RFC_ERROR_INFO &errorInfo, const Loggable::LogEntry::Meta &meta) {
+  logDeferred(env);
   LogEntry logEntry;
   createAPILogEntry_(logEntry, call, file, function, line, errorInfo, meta);
-  log(logEntry);
+  log(env, logEntry);
 }
 
-void Loggable::deferLogAPICall(const std::string& call, const std::string& file, const std::string& function,
-                               unsigned long line, RFC_ERROR_INFO& errorInfo)
-{
+void Loggable::deferLogAPICall(const std::string &call, const std::string &file, const std::string &function,
+                               unsigned long line, RFC_ERROR_INFO &errorInfo) {
   deferLogAPICall(call, file, function, line, errorInfo, LogEntry::Meta());
 }
 
-void Loggable::deferLogAPICall(const std::string& call, const std::string& file, const std::string& function,
-                               unsigned long line, RFC_ERROR_INFO& errorInfo, const Loggable::LogEntry::Meta& meta)
-{
+void Loggable::deferLogAPICall(const std::string &call, const std::string &file, const std::string &function,
+                               unsigned long line, RFC_ERROR_INFO &errorInfo, const Loggable::LogEntry::Meta &meta) {
   LogEntry logEntry;
   createAPILogEntry_(logEntry, call, file, function, line, errorInfo, meta);
-  deferredLogs.push_back( logEntry);
+  deferredLogs.push_back(logEntry);
 }
 
-void Loggable::logDeferred()
-{
-  for(LogEntries::iterator it = deferredLogs.begin(), eit = deferredLogs.end(); it != eit; ++it)
-  {
-    log(*it);
+void Loggable::logDeferred(Napi::Env env) {
+  for (const auto &entry : deferredLogs) {
+    log(env, entry);
   }
   deferredLogs.clear();
 }
 
-void Loggable::resetLogFunction()
-{
+void Loggable::resetLogFunction() {
   logFunction.Reset();
 }
