@@ -29,6 +29,7 @@ SOFTWARE.
 #include <sstream>
 #include <limits>
 #include <cstdint>
+#include <memory>
 
 Napi::FunctionReference Function::ctor;
 
@@ -94,23 +95,15 @@ void Function::Lookup(Napi::Env env, std::u16string &functionName, bool refreshM
     throw RfcError(env, errorInfo);
   }
 
-  unsigned int parmCount;
-  RfcGetParameterCount(functionDescHandle, &parmCount, &errorInfo);
-  LOG_API(env, this, "RfcGetParameterCount");
-  if (errorInfo.code != RFC_OK) {
-    log(env, Levels::DBG, "Function::NewInstance: RfcGetParameterCount unsuccessful");
-    throw RfcError(env, errorInfo);
-  }
+  unsigned int parmCount{};
+  CALL_API_THROW("Function::NewInstance: RfcGetParameterCount unsuccessful",
+                 RfcGetParameterCount, functionDescHandle, &parmCount);
 
   // Dynamically add parameters to JS object
   for (unsigned int i = 0; i < parmCount; i++) {
-    RFC_PARAMETER_DESC parmDesc;
-
-    RfcGetParameterDescByIndex(functionDescHandle, i, &parmDesc, &errorInfo);
-    if (errorInfo.code != RFC_OK) {
-      log(env, Levels::DBG, "Function::NewInstance: RfcGetParameterDescByIndex unsuccessful");
-      throw RfcError(env, errorInfo);
-    }
+    RFC_PARAMETER_DESC parmDesc{};
+    CALL_API_THROW("Function::NewInstance: RfcGetParameterDescByIndex unsuccessful",
+                   RfcGetParameterDescByIndex, functionDescHandle, i, &parmDesc);
     Value().Set(Napi::String::New(env, (const char16_t *) (parmDesc.name)), env.Null());
   }
 }
@@ -119,7 +112,6 @@ void Function::Lookup(Napi::Env env, std::u16string &functionName, bool refreshM
 Napi::Value Function::Invoke(const Napi::CallbackInfo &info) {
   auto env = info.Env();
   Napi::EscapableHandleScope scope{env};
-  unsigned int parmCount;
 
   log(env, Levels::SILLY, "Function::Invoke");
 
@@ -142,24 +134,17 @@ Napi::Value Function::Invoke(const Napi::CallbackInfo &info) {
     return scope.Escape(RfcError(Env(), errorInfo).Value());
   }
 
-  RfcGetParameterCount(functionDescHandle, &parmCount, &errorInfo);
-  LOG_API(env, this, "RfcGetParameterCount");
-  if (errorInfo.code != RFC_OK) {
-    log(env, Levels::DBG, "Function::Invoke: RfcGetParameterCount returned with error");
-    return scope.Escape(RfcError(Env(), errorInfo).Value());
-  }
+  unsigned int parmCount{};
+  CALL_API("Function::Invoke: RfcGetParameterCount returned with error",
+           RfcGetParameterCount, functionDescHandle, &parmCount);
 
   auto inputParam = info[0].ToObject();
 
   for (unsigned int i = 0; i < parmCount; i++) {
     RFC_PARAMETER_DESC paramDesc;
 
-    RfcGetParameterDescByIndex(functionDescHandle, i, &paramDesc, &errorInfo);
-    LOG_API(env, this, "RfcGetParameterDescByIndex");
-    if (errorInfo.code != RFC_OK) {
-      log(env, Levels::DBG, "Function::Invoke: RfcGetParameterDescByIndex finished with error");
-      return scope.Escape(RfcError(Env(), errorInfo).Value());
-    }
+    CALL_API("Function::Invoke: RfcGetParameterDescByIndex finished with error",
+             RfcGetParameterDescByIndex, functionDescHandle, i, &paramDesc);
 
     auto parmName = Napi::String::New(env, (const char16_t *) (paramDesc.name));
     auto result = env.Undefined();
@@ -184,12 +169,8 @@ Napi::Value Function::Invoke(const Napi::CallbackInfo &info) {
       }
     }
 
-    RfcSetParameterActive(functionHandle, paramDesc.name, true, &errorInfo);
-    LOG_API(env, this, "RfcSetParameterActive");
-    if (errorInfo.code != RFC_OK) {
-      log(env, Levels::DBG, "Function::Invoke: RfcSetParameterActive returned error.");
-      return scope.Escape(RfcError(Env(), errorInfo).Value());
-    }
+    CALL_API("Function::Invoke: RfcSetParameterActive returned error.",
+             RfcSetParameterActive, functionHandle, paramDesc.name, true);
   }
 
   auto worker = new FunctionInvoke{callback, connection, this, functionHandle};
@@ -204,7 +185,6 @@ Napi::Value Function::Invoke(const Napi::CallbackInfo &info) {
 Napi::Value Function::MetaData(const Napi::CallbackInfo &info) {
   auto env = info.Env();
   Napi::EscapableHandleScope scope{env};
-  unsigned int parmCount;
 
   log(env, Levels::SILLY, "Function::MetaData");
 
@@ -215,21 +195,14 @@ Napi::Value Function::MetaData(const Napi::CallbackInfo &info) {
     refreshMeta = optionsObject.Get("refresh").ToBoolean();
   }
 
-  RfcGetParameterCount(functionDescHandle, &parmCount, &errorInfo);
-  LOG_API(env, this, "RfcGetParameterCount");
-  if (errorInfo.code != RFC_OK) {
-    log(env, Levels::DBG, "Function::MetaData: RfcGetParameterCount returned with error");
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  unsigned int parmCount{};
+  CALL_API("Function::MetaData: RfcGetParameterCount returned with error",
+           RfcGetParameterCount, functionDescHandle, &parmCount);
 
   auto metaObject = Napi::Object::New(env);
-  RFC_ABAP_NAME functionName;
-  RfcGetFunctionName(functionDescHandle, functionName, &errorInfo);
-  LOG_API(env, this, "RfcGetFunctionName");
-  if (errorInfo.code != RFC_OK) {
-    log(env, Levels::DBG, "Function::MetaData: RfcGetFunctionName returned with error");
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  RFC_ABAP_NAME functionName{};
+  CALL_API("Function::MetaData: RfcGetFunctionName returned with error",
+           RfcGetFunctionName, functionDescHandle, functionName);
 
   RFC_FUNCTION_HANDLE functionHandle = RfcCreateFunction(functionDescHandle, &errorInfo);
   LOG_API(env, this, "RfcCreateFunction");
@@ -250,14 +223,9 @@ Napi::Value Function::MetaData(const Napi::CallbackInfo &info) {
 
   // Dynamically add parameters to JS object
   for (unsigned int i = 0; i < parmCount; i++) {
-    RFC_PARAMETER_DESC parmDesc;
-
-    RfcGetParameterDescByIndex(functionDescHandle, i, &parmDesc, &errorInfo);
-    LOG_API(env, this, "RfcGetParameterDescByIndex");
-    if (errorInfo.code != RFC_OK) {
-      log(env, Levels::DBG, "Function::MetaData: RfcGetParameterDescByIndex finished with error");
-      return scope.Escape(RfcError(env, errorInfo).Value());
-    }
+    RFC_PARAMETER_DESC parmDesc{};
+    CALL_API("Function::MetaData: RfcGetParameterDescByIndex finished with error",
+             RfcGetParameterDescByIndex, functionDescHandle, i, &parmDesc);
 
     if (!addMetaData(env, functionHandle, properties, parmDesc.name, parmDesc.type,
                      parmDesc.nucLength, parmDesc.direction,
@@ -275,39 +243,30 @@ Napi::Value Function::MetaData(const Napi::CallbackInfo &info) {
 
 Napi::Value Function::DoReceive(Napi::Env env, CHND container) {
   Napi::EscapableHandleScope scope{env};
-  unsigned int parmCount;
 
   auto result = Napi::Object::New(env);
 
   // Get resulting values for exporting/changing/table parameters
-  RfcGetParameterCount(this->functionDescHandle, &parmCount, &errorInfo);
-  LOG_API(env, this, "RfcGetParameterCount");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  unsigned int parmCount{};
+  CALL_API(nullptr, RfcGetParameterCount, functionDescHandle, &parmCount);
 
   for (unsigned int i = 0; i < parmCount; i++) {
-    RFC_PARAMETER_DESC parmDesc;
-    auto paramValue = Napi::Value();
-
-    RfcGetParameterDescByIndex(this->functionDescHandle, i, &parmDesc, &errorInfo);
-    LOG_API(env, this, "RfcGetParameterDescByIndex");
-    if (errorInfo.code != RFC_OK) {
-      return scope.Escape(RfcError(env, errorInfo).Value());
-    }
+    RFC_PARAMETER_DESC parmDesc{};
+    CALL_API(nullptr, RfcGetParameterDescByIndex, functionDescHandle, i, &parmDesc);
 
     switch (parmDesc.direction) {
       case RFC_IMPORT:
         //break;
       case RFC_CHANGING:
       case RFC_TABLES:
-      case RFC_EXPORT:
-        paramValue = this->GetValue(env, container, parmDesc.type, parmDesc.name, parmDesc.nucLength);
+      case RFC_EXPORT: {
+        auto paramValue = GetValue(env, container, parmDesc.type, parmDesc.name, parmDesc.nucLength);
         if (IsException(env, paramValue)) {
           return scope.Escape(paramValue);
         }
         result.Set(Napi::String::New(env, (const char16_t *) (parmDesc.name)), paramValue);
         break;
+      }
       default:
         assert(0);
         break;
@@ -382,13 +341,8 @@ Function::SetValue(Napi::Env env, CHND container, RFCTYPE type, const SAP_UC *na
 
 Napi::Value Function::StructureToExternal(Napi::Env env, CHND container, const SAP_UC *name, Napi::Value value) {
   Napi::EscapableHandleScope scope{env};
-  RFC_STRUCTURE_HANDLE structHandle;
-
-  RfcGetStructure(container, name, &structHandle, &errorInfo);
-  LOG_API(env, this, "RfcGetStructure");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  RFC_STRUCTURE_HANDLE structHandle{};
+  CALL_API(nullptr, RfcGetStructure, container, name, &structHandle);
 
   return scope.Escape(StructureToExternal(env, structHandle, value));
 }
@@ -408,20 +362,12 @@ Napi::Value Function::StructureToExternal(Napi::Env env, RFC_STRUCTURE_HANDLE st
     return scope.Escape(RfcError(env, errorInfo).Value());
   }
 
-  unsigned fieldCount;
-  RfcGetFieldCount(typeHandle, &fieldCount, &errorInfo);
-  LOG_API(env, this, "RfcGetFieldCount");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  unsigned fieldCount{};
+  CALL_API(nullptr, RfcGetFieldCount, typeHandle, &fieldCount);
 
   for (unsigned int i = 0; i < fieldCount; i++) {
-    RFC_FIELD_DESC fieldDesc;
-    RfcGetFieldDescByIndex(typeHandle, i, &fieldDesc, &errorInfo);
-    LOG_API(env, this, "RfcGetFieldDescByIndex");
-    if (errorInfo.code != RFC_OK) {
-      return scope.Escape(RfcError(env, errorInfo).Value());
-    }
+    RFC_FIELD_DESC fieldDesc{};
+    CALL_API(nullptr, RfcGetFieldDescByIndex, typeHandle, i, &fieldDesc);
 
     auto fieldName = Napi::String::New(env, (const char16_t *) (fieldDesc.name));
 
@@ -446,12 +392,8 @@ Napi::Value Function::TableToExternal(Napi::Env env, CHND container, const SAP_U
     return scope.Escape(Napi::TypeError::New(env, err).Value());
   }
 
-  RFC_TABLE_HANDLE tableHandle;
-  RfcGetTable(container, name, &tableHandle, &errorInfo);
-  LOG_API(env, this, "RfcGetTable");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  RFC_TABLE_HANDLE tableHandle{};
+  CALL_API(nullptr, RfcGetTable, container, name, &tableHandle);
 
   auto source = value.As<Napi::Array>();
   auto rowCount = source.Length();
@@ -479,11 +421,7 @@ Napi::Value Function::StringToExternal(Napi::Env env, CHND container, const SAP_
   }
 
   auto valueU16 = value.ToString().Utf16Value();
-  RfcSetString(container, name, (const SAP_UC *) valueU16.data(), valueU16.length(), &errorInfo);
-  LOG_API(env, this, "RfcSetString");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetString, container, name, (const SAP_UC *) valueU16.data(), valueU16.length());
 
   return scope.Escape(env.Null());
 }
@@ -497,12 +435,7 @@ Napi::Value Function::XStringToExternal(Napi::Env env, CHND container, const SAP
   }
 
   auto buffer = value.As<Napi::Buffer<SAP_RAW>>();
-
-  RfcSetXString(container, name, buffer.Data(), buffer.Length(), &errorInfo);
-  LOG_API(env, this, "RfcSetXString");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetXString, container, name, buffer.Data(), buffer.Length());
 
   return scope.Escape(env.Null());
 }
@@ -521,12 +454,7 @@ Function::NumToExternal(Napi::Env env, CHND container, const SAP_UC *name, Napi:
     auto err = "Argument exceeds maximum length: " + convertToString(env, name);
     return scope.Escape(Napi::TypeError::New(env, err).Value());
   }
-
-  RfcSetNum(container, name, (const RFC_NUM *) valueU16.data(), valueU16.length(), &errorInfo);
-  LOG_API(env, this, "RfcSetNum");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetNum, container, name, (const RFC_NUM *) valueU16.data(), valueU16.length());
 
   return scope.Escape(env.Null());
 }
@@ -545,12 +473,7 @@ Function::CharToExternal(Napi::Env env, CHND container, const SAP_UC *name, Napi
     auto err = "Argument exceeds maximum length: " + convertToString(env, name);
     return scope.Escape(Napi::TypeError::New(env, err).Value());
   }
-
-  RfcSetChars(container, name, (const RFC_CHAR *) valueU16.data(), valueU16.length(), &errorInfo);
-  LOG_API(env, this, "RfcSetChars");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetChars, container, name, (const RFC_CHAR *) valueU16.data(), valueU16.length());
 
   return scope.Escape(env.Null());
 }
@@ -569,12 +492,7 @@ Function::ByteToExternal(Napi::Env env, CHND container, const SAP_UC *name, Napi
     auto err = "Argument exceeds maximum length: " + convertToString(env, name);
     return scope.Escape(Napi::TypeError::New(env, err).Value());
   }
-
-  RfcSetBytes(container, name, buffer.Data(), buffer.Length(), &errorInfo);
-  LOG_API(env, this, "RfcSetBytes");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetBytes, container, name, buffer.Data(), buffer.Length());
 
   return scope.Escape(env.Null());
 }
@@ -588,11 +506,7 @@ Napi::Value Function::IntToExternal(Napi::Env env, CHND container, const SAP_UC 
   }
   RFC_INT rfcValue = value.ToNumber().Int32Value();
 
-  RfcSetInt(container, name, rfcValue, &errorInfo);
-  LOG_API(env, this, "RfcSetInt");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetInt, container, name, rfcValue);
 
   return scope.Escape(env.Null());
 }
@@ -611,11 +525,7 @@ Napi::Value Function::Int1ToExternal(Napi::Env env, CHND container, const SAP_UC
   }
   RFC_INT1 rfcValue = convertedValue;
 
-  RfcSetInt1(container, name, rfcValue, &errorInfo);
-  LOG_API(env, this, "RfcSetInt1");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetInt1, container, name, rfcValue);
 
   return scope.Escape(env.Null());
 }
@@ -635,11 +545,7 @@ Napi::Value Function::Int2ToExternal(Napi::Env env, CHND container, const SAP_UC
   }
   RFC_INT2 rfcValue = convertedValue;
 
-  RfcSetInt2(container, name, rfcValue, &errorInfo);
-  LOG_API(env, this, "RfcSetInt2");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetInt2, container, name, rfcValue);
 
   return scope.Escape(env.Null());
 }
@@ -653,11 +559,7 @@ Napi::Value Function::FloatToExternal(Napi::Env env, CHND container, const SAP_U
   }
   RFC_FLOAT rfcValue = value.ToNumber().DoubleValue();
 
-  RfcSetFloat(container, name, rfcValue, &errorInfo);
-  LOG_API(env, this, "RfcSetFloat");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetFloat, container, name, rfcValue);
 
   return scope.Escape(env.Null());
 }
@@ -676,11 +578,7 @@ Napi::Value Function::DateToExternal(Napi::Env env, CHND container, const SAP_UC
     return scope.Escape(Napi::TypeError::New(env, err).Value());
   }
 
-  RfcSetDate(container, name, (const RFC_CHAR *) valueU16.c_str(), &errorInfo);
-  LOG_API(env, this, "RfcSetDate");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetDate, container, name, (const RFC_CHAR *) valueU16.c_str());
 
   return scope.Escape(env.Null());
 }
@@ -699,11 +597,7 @@ Napi::Value Function::TimeToExternal(Napi::Env env, CHND container, const SAP_UC
     return scope.Escape(Napi::TypeError::New(env, err).Value());
   }
 
-  RfcSetTime(container, name, (const RFC_CHAR *) valueU16.c_str(), &errorInfo);
-  LOG_API(env, this, "RfcSetTime");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetTime, container, name, (const RFC_CHAR *) valueU16.c_str());
 
   return scope.Escape(env.Null());
 }
@@ -718,11 +612,7 @@ Napi::Value Function::BCDToExternal(Napi::Env env, CHND container, const SAP_UC 
 
   auto valueU16 = value.ToString().Utf16Value();
 
-  RfcSetString(container, name, (const SAP_UC *) valueU16.data(), valueU16.length(), &errorInfo);
-  LOG_API(env, this, "RfcSetString");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcSetString, container, name, (const SAP_UC *) valueU16.data(), valueU16.length());
 
   return scope.Escape(env.Null());
 }
@@ -787,14 +677,8 @@ Napi::Value Function::GetValue(Napi::Env env, const CHND container, RFCTYPE type
 
 Napi::Value Function::StructureToInternal(Napi::Env env, CHND container, const SAP_UC *name) {
   Napi::EscapableHandleScope scope{env};
-  RFC_STRUCTURE_HANDLE structHandle;
-
-  RfcGetStructure(container, name, &structHandle, &errorInfo);
-  LOG_API(env, this, "RfcGetStructure");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
-
+  RFC_STRUCTURE_HANDLE structHandle{};
+  CALL_API(nullptr, RfcGetStructure, container, name, &structHandle);
   return scope.Escape(StructureToInternal(env, structHandle));
 }
 
@@ -809,21 +693,13 @@ Napi::Value Function::StructureToInternal(Napi::Env env, RFC_STRUCTURE_HANDLE st
   }
 
   unsigned fieldCount{};
-  RfcGetFieldCount(typeHandle, &fieldCount, &errorInfo);
-  LOG_API(env, this, "RfcGetFieldCount");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcGetFieldCount, typeHandle, &fieldCount);
 
   auto obj = Napi::Object::New(env);
 
   for (unsigned int i = 0; i < fieldCount; i++) {
-    RFC_FIELD_DESC fieldDesc;
-    RfcGetFieldDescByIndex(typeHandle, i, &fieldDesc, &errorInfo);
-    LOG_API(env, this, "RfcGetFieldDescByIndex");
-    if (errorInfo.code != RFC_OK) {
-      return scope.Escape(RfcError(env, errorInfo).Value());
-    }
+    RFC_FIELD_DESC fieldDesc{};
+    CALL_API(nullptr, RfcGetFieldDescByIndex, typeHandle, i, &fieldDesc);
 
     auto value = GetValue(env, structHandle, fieldDesc.type, fieldDesc.name, fieldDesc.nucLength);
     // Bail out on exception
@@ -839,19 +715,11 @@ Napi::Value Function::StructureToInternal(Napi::Env env, RFC_STRUCTURE_HANDLE st
 Napi::Value Function::TableToInternal(Napi::Env env, CHND container, const SAP_UC *name) {
   Napi::EscapableHandleScope scope{env};
 
-  RFC_TABLE_HANDLE tableHandle;
-  RfcGetTable(container, name, &tableHandle, &errorInfo);
-  LOG_API(env, this, "RfcGetTable");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  RFC_TABLE_HANDLE tableHandle{};
+  CALL_API(nullptr, RfcGetTable, container, name, &tableHandle);
 
   unsigned rowCount{};
-  RfcGetRowCount(tableHandle, &rowCount, &errorInfo);
-  LOG_API(env, this, "RfcGetRowCount");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcGetRowCount, tableHandle, &rowCount);
 
   // Create array holding table lines
   auto obj = Napi::Array::New(env);
@@ -885,11 +753,7 @@ Napi::Value Function::StringToInternal(Napi::Env env, CHND container, const SAP_
   Napi::EscapableHandleScope scope{env};
 
   unsigned strLen{};
-  RfcGetStringLength(container, name, &strLen, &errorInfo);
-  LOG_API(env, this, "RfcGetStringLength");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcGetStringLength, container, name, &strLen);
 
   if (strLen == 0) {
     return scope.Escape(Napi::String::New(env, ""));
@@ -898,11 +762,7 @@ Napi::Value Function::StringToInternal(Napi::Env env, CHND container, const SAP_
   auto buffer = getZeroedBuffer<SAP_UC>(strLen + 1);
 
   unsigned retStrLen{};
-  RfcGetString(container, name, buffer.get(), strLen + 1, &retStrLen, &errorInfo);
-  LOG_API(env, this, "RfcGetString");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcGetString, container, name, buffer.get(), strLen + 1, &retStrLen);
 
   return scope.Escape(Napi::String::New(env, (const char16_t *) (buffer.get())));
 }
@@ -911,11 +771,7 @@ Napi::Value Function::XStringToInternal(Napi::Env env, const CHND container, con
   Napi::EscapableHandleScope scope{env};
 
   unsigned strLen{};
-  RfcGetStringLength(container, name, &strLen, &errorInfo);
-  LOG_API(env, this, "RfcGetStringLength");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcGetStringLength, container, name, &strLen);
 
   if (strLen == 0) {
     return scope.Escape(Napi::String::New(env, ""));
@@ -924,11 +780,7 @@ Napi::Value Function::XStringToInternal(Napi::Env env, const CHND container, con
   auto buffer = getZeroedBuffer<SAP_RAW>(strLen + 1);
 
   unsigned retStrLen{};
-  RfcGetXString(container, name, buffer.get(), strLen, &retStrLen, &errorInfo);
-  LOG_API(env, this, "RfcGetXString");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcGetXString, container, name, buffer.get(), strLen, &retStrLen);
 
   /* Buffer does not assume ownership by its own but requires data to be alive
    * for its lifetime. However with the finalizer, we can treat it as a smart pointer.
@@ -946,12 +798,7 @@ Napi::Value Function::NumToInternal(Napi::Env env, CHND container, const SAP_UC 
   Napi::EscapableHandleScope scope{env};
 
   auto buffer = getZeroedBuffer<RFC_NUM>(len + 1);
-
-  RfcGetNum(container, name, buffer.get(), len, &errorInfo);
-  LOG_API(env, this, "RfcGetNum");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcGetNum, container, name, buffer.get(), len);
 
   return scope.Escape(Napi::String::New(env, (const char16_t *) (buffer.get())));
 }
@@ -960,12 +807,7 @@ Napi::Value Function::CharToInternal(Napi::Env env, CHND container, const SAP_UC
   Napi::EscapableHandleScope scope{env};
 
   auto buffer = getZeroedBuffer<RFC_CHAR>(len + 1);
-
-  RfcGetChars(container, name, buffer.get(), len, &errorInfo);
-  LOG_API(env, this, "RfcGetChars");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcGetChars, container, name, buffer.get(), len);
 
   return scope.Escape(Napi::String::New(env, (const char16_t *) (buffer.get())));
 }
@@ -974,12 +816,7 @@ Napi::Value Function::ByteToInternal(Napi::Env env, CHND container, const SAP_UC
   Napi::EscapableHandleScope scope{env};
 
   auto buffer = getZeroedBuffer<RFC_BYTE>(len);
-
-  RfcGetBytes(container, name, buffer.get(), len, &errorInfo);
-  LOG_API(env, this, "RfcGetBytes");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  CALL_API(nullptr, RfcGetBytes, container, name, buffer.get(), len);
 
   /* Buffer does not assume ownership by its own but requires data to be alive
    * for its lifetime. However with the finalizer, we can treat it as a smart pointer.
@@ -995,78 +832,50 @@ Napi::Value Function::ByteToInternal(Napi::Env env, CHND container, const SAP_UC
 
 Napi::Value Function::IntToInternal(Napi::Env env, CHND container, const SAP_UC *name) {
   Napi::EscapableHandleScope scope{env};
-  RFC_INT value;
-
-  RfcGetInt(container, name, &value, &errorInfo);
-  LOG_API(env, this, "RfcGetInt");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  RFC_INT value{};
+  CALL_API(nullptr, RfcGetInt, container, name, &value);
 
   return scope.Escape(Napi::Number::New(env, value));
 }
 
 Napi::Value Function::Int1ToInternal(Napi::Env env, CHND container, const SAP_UC *name) {
   Napi::EscapableHandleScope scope{env};
-  RFC_INT1 value;
-
-  RfcGetInt1(container, name, &value, &errorInfo);
-  LOG_API(env, this, "RfcGetInt1");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  RFC_INT1 value{};
+  CALL_API(nullptr, RfcGetInt1, container, name, &value);
 
   return scope.Escape(Napi::Number::New(env, value));
 }
 
 Napi::Value Function::Int2ToInternal(Napi::Env env, CHND container, const SAP_UC *name) {
   Napi::EscapableHandleScope scope{env};
-  RFC_INT2 value;
-
-  RfcGetInt2(container, name, &value, &errorInfo);
-  LOG_API(env, this, "RfcGetInt2");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  RFC_INT2 value{};
+  CALL_API(nullptr, RfcGetInt2, container, name, &value);
 
   return scope.Escape(Napi::Number::New(env, value));
 }
 
 Napi::Value Function::FloatToInternal(Napi::Env env, CHND container, const SAP_UC *name) {
   Napi::EscapableHandleScope scope{env};
-  RFC_FLOAT value;
-
-  RfcGetFloat(container, name, &value, &errorInfo);
-  LOG_API(env, this, "RfcGetFloat");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
+  RFC_FLOAT value{};
+  CALL_API(nullptr, RfcGetFloat, container, name, &value);
 
   return scope.Escape(Napi::Number::New(env, value));
 }
 
 Napi::Value Function::DateToInternal(Napi::Env env, CHND container, const SAP_UC *name) {
   Napi::EscapableHandleScope scope{env};
-  RFC_DATE date = {0};
+  RFC_DATE value = {0};
+  CALL_API(nullptr, RfcGetDate, container, name, value);
 
-  RfcGetDate(container, name, date, &errorInfo);
-  LOG_API(env, this, "RfcGetDate");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
-  return scope.Escape(Napi::String::New(env, (const char16_t *) (date), sizeof(RFC_DATE) / sizeof(RFC_CHAR)));
+  return scope.Escape(Napi::String::New(env, (const char16_t *) (value), sizeof(RFC_DATE) / sizeof(RFC_CHAR)));
 }
 
 Napi::Value Function::TimeToInternal(Napi::Env env, CHND container, const SAP_UC *name) {
   Napi::EscapableHandleScope scope{env};
-  RFC_TIME time = {0};
+  RFC_TIME value = {0};
+  CALL_API(nullptr, RfcGetTime, container, name, value);
 
-  RfcGetTime(container, name, time, &errorInfo);
-  LOG_API(env, this, "RfcGetTime");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(env, errorInfo).Value());
-  }
-  return scope.Escape(Napi::String::New(env, (const char16_t *) (time), sizeof(RFC_TIME) / sizeof(RFC_CHAR)));
+  return scope.Escape(Napi::String::New(env, (const char16_t *) (value), sizeof(RFC_TIME) / sizeof(RFC_CHAR)));
 }
 
 Napi::Value Function::BCDToInternal(Napi::Env env, CHND container, const SAP_UC *name) {

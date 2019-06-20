@@ -41,6 +41,7 @@ class Connection : public Loggable, public Napi::ObjectWrap<Connection> {
     explicit Connection(const Napi::CallbackInfo &info);
     ~Connection();
 
+    RFC_ERROR_INFO errorInfo{};
   protected:
     Napi::Value GetVersion(const Napi::CallbackInfo &info);
     Napi::Value Open(const Napi::CallbackInfo &info);
@@ -52,14 +53,13 @@ class Connection : public Loggable, public Napi::ObjectWrap<Connection> {
 
     Napi::Value CloseConnection(Napi::Env env);
 
-    RFC_CONNECTION_HANDLE GetConnectionHandle(void);
-    void LockMutex(void);
-    void UnlockMutex(void);
+    RFC_CONNECTION_HANDLE GetConnectionHandle();
+    void LockMutex();
+    void UnlockMutex();
     void addObjectInfoToLogMeta(Napi::Object meta) override;
 
     unsigned int loginParamsSize{};
     RFC_CONNECTION_PARAMETER *loginParams{};
-    RFC_ERROR_INFO errorInfo{};
     RFC_CONNECTION_HANDLE connectionHandle{};
     static Napi::FunctionReference ctor;
 

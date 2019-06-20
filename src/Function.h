@@ -43,6 +43,8 @@ class Function : public Loggable, public Napi::ObjectWrap<Function> {
 
     void Lookup(Napi::Env env, std::u16string &functionName, bool refreshMeta);
 
+    RFC_ERROR_INFO errorInfo{};
+
   protected:
 
     Napi::Value Invoke(const Napi::CallbackInfo &info);
@@ -96,7 +98,6 @@ class Function : public Loggable, public Napi::ObjectWrap<Function> {
 
     Connection *connection{};
     RFC_FUNCTION_DESC_HANDLE functionDescHandle{};
-    RFC_ERROR_INFO errorInfo{};
 };
 
 #endif /* FUNCTION_H_ */

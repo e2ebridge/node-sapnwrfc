@@ -152,14 +152,11 @@ Napi::Value Connection::CloseConnection(Napi::Env env) {
 
   log(env, Levels::SILLY, "Connection::CloseConnection");
 
-  if (this->connectionHandle != nullptr) {
-    RfcCloseConnection(this->connectionHandle, &errorInfo);
+  auto handle = connectionHandle;
+  if (handle != nullptr) {
     this->connectionHandle = nullptr;
-    LOG_API(env, this, "RfcCloseConnection");
-    if (errorInfo.code != RFC_OK) {
-      log(env, Levels::DBG, "Connection::CloseConnection: Error closing connection");
-      return scope.Escape(RfcError(env, errorInfo).Value());
-    }
+    CALL_API("Connection::CloseConnection: Error closing connection",
+              RfcCloseConnection, handle);
   }
 
   return scope.Escape(Napi::Boolean::New(env, true));
@@ -169,11 +166,11 @@ RFC_CONNECTION_HANDLE Connection::GetConnectionHandle(void) {
   return this->connectionHandle;
 }
 
-void Connection::LockMutex(void) {
+void Connection::LockMutex() {
   uv_mutex_lock(&this->invocationMutex);
 }
 
-void Connection::UnlockMutex(void) {
+void Connection::UnlockMutex() {
   uv_mutex_unlock(&this->invocationMutex);
 }
 
@@ -208,17 +205,13 @@ Napi::Value Connection::Ping(const Napi::CallbackInfo &info) {
   auto env = info.Env();
   Napi::EscapableHandleScope scope{env};
 
-  log(env, Levels::SILLY, "Connection::IsOpen");
+  log(env, Levels::SILLY, "Connection::Ping");
 
   if (info.Length() > 0) {
     throw Napi::Error::New(env, "No arguments expected");
   }
 
-  RfcPing(connectionHandle, &errorInfo);
-  LOG_API(env, this, "RfcPing");
-  if (errorInfo.code != RFC_OK) {
-    return scope.Escape(RfcError(Env(), errorInfo).Value());
-  }
+  CALL_API("Connection::Ping: RfcPing failed", RfcPing, connectionHandle);
 
   return scope.Escape(Napi::Boolean::New(env, true));
 }
@@ -261,6 +254,7 @@ Napi::Value Connection::Lookup(const Napi::CallbackInfo &info) {
   return scope.Escape(jsf);
 }
 
+
 /**
  *
  * @return true if successful, else: RfcException
@@ -278,13 +272,9 @@ Napi::Value Connection::SetIniPath(const Napi::CallbackInfo &info) {
     throw Napi::TypeError::New(env, "Argument 1 must be a path name");
   }
 
-  RfcSetIniPath(reinterpret_cast<const SAP_UC *>(info[0].ToString().Utf16Value().c_str()),
-                &errorInfo);
-  LOG_API(env, this, "RfcSetIniPath");
-  if (errorInfo.code) {
-    log(env, Levels::DBG, "Connection::SetIniPath: RfcSetIniPath failed");
-    throw RfcError(env, errorInfo);
-  }
+  CALL_API_THROW("Connection::SetIniPath: RfcSetIniPath failed",
+                  RfcSetIniPath,
+                  reinterpret_cast<const SAP_UC *>(info[0].ToString().Utf16Value().c_str()));
 
   return scope.Escape(Napi::Boolean::New(env, true));
 }

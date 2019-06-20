@@ -29,6 +29,7 @@ SOFTWARE.
 #include <sapnwrfc.h>
 #include <iostream>
 #include <napi.h>
+#include "Loggable.h"
 
 #ifdef _MSC_VER
 #if _MSC_VER < 1900
@@ -84,5 +85,35 @@ static bool IsException(Napi::Env env, const Napi::Value value) {
   napi_is_error(env, value, &result);
   return result;
 }
+
+template<typename This, typename Api, typename... Args>
+Napi::Value call_api(Napi::Env env, Napi::EscapableHandleScope* scope, This* that, const std::string& file, const std::string& function,
+              unsigned long line, const char* failMsg, Api api, const char* apiName, Args... args) {
+  api(args..., &that->errorInfo);
+  that->logAPICall(env, apiName, file, function, line, that->errorInfo);
+  if (that->errorInfo.code) {
+    if(failMsg) {
+      that->log(env, Loggable::Levels::DBG, failMsg);
+    }
+    if(scope) {
+      return scope->Escape(RfcError(env, that->errorInfo).Value());
+    } else {
+      throw RfcError(env, that->errorInfo);
+    }
+  }
+  return env.Undefined();
+}
+
+#define CALL_API_THROW(failMsg_, api_, ...) \
+call_api(env, nullptr, this, __FILE__, BOOST_CURRENT_FUNCTION, __LINE__, failMsg_, api_, #api_, __VA_ARGS__)
+
+#define CALL_API(failMsg_, api_, ...) \
+{ \
+  auto r_ = call_api(env, &scope, this, __FILE__, BOOST_CURRENT_FUNCTION, __LINE__, failMsg_, api_, #api_, __VA_ARGS__); \
+  if(!r_.IsUndefined()) { \
+    return r_; \
+  } \
+} while(0)
+
 
 #endif /* COMMON_H_ */

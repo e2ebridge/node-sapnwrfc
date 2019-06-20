@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "Loggable.h"
+#include "Common.h"
 #include <algorithm>
 
 const std::string Loggable::Levels::SILLY	= "silly";

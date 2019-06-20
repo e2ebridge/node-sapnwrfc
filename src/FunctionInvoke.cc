@@ -24,6 +24,7 @@ SOFTWARE.
 */
 
 #include "FunctionInvoke.h"
+#include <cassert>
 
 FunctionInvoke::FunctionInvoke(const Napi::Function &callback, Connection *connection, Function *function,
                                RFC_DATA_CONTAINER *functionHandle)
