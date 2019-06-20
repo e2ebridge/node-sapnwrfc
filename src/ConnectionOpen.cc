@@ -24,7 +24,7 @@ SOFTWARE.
 */
 
 #include "ConnectionOpen.h"
-#include "Common.h"
+#include "Utils.h"
 #include <sapnwrfc.h>
 
 ConnectionOpen::ConnectionOpen(const Napi::Function &callback, Connection *connection)

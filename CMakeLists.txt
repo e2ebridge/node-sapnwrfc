@@ -21,7 +21,6 @@ set_target_properties(sapnwrfc::libsapucum PROPERTIES
 set(Sources
   src/binding.cc
   src/current_function.hpp
-  src/Common.h
   src/Connection.cc
   src/Connection.h
   src/ConnectionOpen.cc
@@ -32,6 +31,8 @@ set(Sources
   src/FunctionInvoke.h
   src/Loggable.cc
   src/Loggable.h
+  src/Utils.cc
+  src/Utils.h
   examples/example1.js
 )
 

@@ -26,10 +26,9 @@ SOFTWARE.
 #ifndef COMMON_H_
 #define COMMON_H_
 
-#include <sapnwrfc.h>
-#include <iostream>
-#include <napi.h>
 #include "Loggable.h"
+#include <sapnwrfc.h>
+#include <napi.h>
 
 #ifdef _MSC_VER
 #if _MSC_VER < 1900
@@ -39,52 +38,12 @@ SOFTWARE.
 
 typedef DATA_CONTAINER_HANDLE CHND;
 
-static std::string convertToString(Napi::Env env, const SAP_UC *str) {
-  Napi::HandleScope scope{env};
-  auto utf16String = Napi::String::New(env, (const char16_t *) (str));
-  return utf16String.Utf8Value();
-}
+std::string convertToString(Napi::Env env, const SAP_UC *str);
+SAP_UC *convertToSAPUC(Napi::String const &str);
+void FillRfcInfo(Napi::Env env, const RFC_ERROR_INFO &info, Napi::Object out);
+Napi::Error RfcError(Napi::Env env, const RFC_ERROR_INFO &info);
+bool IsException(Napi::Env env, const Napi::Value value);
 
-static SAP_UC *convertToSAPUC(Napi::String const &str) {
-  auto u16Value = str.Utf16Value();
-  auto size = u16Value.length();
-  auto ret = new char16_t[size + 1];
-  u16Value.copy(ret, size);
-  ret[size] = 0;
-  return reinterpret_cast<SAP_UC *>(ret);
-}
-
-static void FillRfcInfo(Napi::Env env, const RFC_ERROR_INFO &info, Napi::Object out) {
-  using namespace Napi;
-  HandleScope scope{env};
-
-  out.Set("code", Number::New(env, info.code));
-  out.Set("group", Number::New(env, info.group));
-  out.Set("key", String::New(env, (const char16_t *) (info.key)));
-  out.Set("class", String::New(env, (const char16_t *) (info.abapMsgClass)));
-  out.Set("type", String::New(env, (const char16_t *) (info.abapMsgType)));
-  out.Set("number", String::New(env, (const char16_t *) (info.abapMsgNumber)));
-  out.Set("msgv1", String::New(env, (const char16_t *) (info.abapMsgV1)));
-  out.Set("msgv2", String::New(env, (const char16_t *) (info.abapMsgV2)));
-  out.Set("msgv3", String::New(env, (const char16_t *) (info.abapMsgV3)));
-  out.Set("msgv4", String::New(env, (const char16_t *) (info.abapMsgV4)));
-}
-
-static Napi::Error RfcError(Napi::Env env, const RFC_ERROR_INFO &info) {
-  using namespace Napi;
-  HandleScope scope{env};
-
-  auto e = Error::New(env, String::New(env, (const char16_t *) (info.message)));
-  FillRfcInfo(env, info, e.Value());
-
-  return e;
-}
-
-static bool IsException(Napi::Env env, const Napi::Value value) {
-  bool result{};
-  napi_is_error(env, value, &result);
-  return result;
-}
 
 template<typename This, typename Api, typename... Args>
 Napi::Value call_api(Napi::Env env, Napi::EscapableHandleScope* scope, This* that, const std::string& file, const std::string& function,

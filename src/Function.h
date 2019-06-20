@@ -26,7 +26,7 @@ SOFTWARE.
 #ifndef FUNCTION_H_
 #define FUNCTION_H_
 
-#include "Common.h"
+#include "Utils.h"
 #include "Loggable.h"
 #include <sapnwrfc.h>
 #include "Connection.h"
