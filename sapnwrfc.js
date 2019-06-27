@@ -1,7 +1,7 @@
-var majMinVersion = process.versions.node.match(/^[0-9]+.[0-9]+/)[0] || '';
-var sapnwrfc = require('bindings')({bindings: 'sapnwrfc', version: majMinVersion});
+const load = require('./load');
+const sapnwrfc = require(load.modulePath);
 
-var _logger;
+let _logger;
 
 sapnwrfc.configure = function(options) {
     if(options) {
