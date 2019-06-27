@@ -1,6 +1,6 @@
 {
   "name": "@e2ebridge/sapnwrfc",
-  "version": "1.3.2",
+  "version": "2.0.0",
   "description": "Bindings for the SAP NetWeaver RFC SDK",
   "license": "MIT",
   "homepage": "https://github.com/e2ebridge/node-sapnwrfc",
